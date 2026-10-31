@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,9 @@ import { installedFamilies } from './installed-families.mjs';
 
 const consumer = dirname(fileURLToPath(import.meta.url));
 const pageRoot = join(consumer, '..', 'page');
+// The journey clicks the real page as it is laid out; without its built Tailwind the page is unstyled and controls fall
+// outside the viewport, so a missing stylesheet is named here rather than as a click timeout.
+assert.ok(existsSync(join(pageRoot, 'styles', 'tailwind.css')), 'The page has no built styles/tailwind.css; build it before copying the page.');
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const families = await installedFamilies({ root: catalogRoot, sourceInput: 'catalog-controller-browser' });
 const eccFamily = families.find(family => family.family === 'ECC');

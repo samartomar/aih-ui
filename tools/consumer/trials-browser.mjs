@@ -22,6 +22,9 @@ const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', UNRELATED = 'aihq.project-context', SKIPPED = 'mattpocock.wait-what', SUGGESTED = 'mattpocock.tdd', CLIENTS = ['claude', 'codex'];
 const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript.';
 const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states', 'tool-host'];
+// A trial step writes exactly its record and re-reads. The drawer may also re-read the chosen tool's host, read-only, while
+// that host has given no answer (F15 retries an unavailable answer on each change); only that read is set aside.
+const written = operations => operations.filter(operation => operation !== 'tool-host');
 const OPENED = /Saved draft reopened|Unresolved draft opened/;
 const NO_CAP = 'No enforcement mechanism is available here, so no bound is a cap.';
 const COST_UNKNOWN = 'Model or service spending: no cost source is connected, so it is unknown.';
@@ -179,7 +182,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     for (const index of [1, 2]) assert.deepEqual(await labelled(planning, `Bound ${index} enforcement`).locator('option').allInnerTexts(), ['Advisory (not enforced)'], 'Only advisory is offered without a mechanism.');
     assert.equal(await labelled(planning, 'Unknown cost 1').inputValue(), COST_UNKNOWN, 'The unknown cost is prefilled.');
     steps.propose = await act(first, () => planning.getByRole('button', { name: 'Propose trial', exact: true }).click());
-    assert.deepEqual(steps.propose, ['trials-record', 'trials-read']);
+    assert.deepEqual(written(steps.propose), ['trials-record', 'trials-read']);
     assert.equal(await cards(first).count(), 1);
     const trialA = await cards(first).first().getAttribute('data-trial-id');
     const proposedText = await textOf(card(first, trialA));
@@ -196,7 +199,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     await observe(first, trialA, { option: 'baseline', target: 'setup', kind: 'declared', amount: 10, unit: 'minutes' });
     await observe(first, trialA, { option: 'trial', target: 'setup', kind: 'declared', amount: 15, unit: 'minutes' });
     steps.measure = await press(first, trialA, 'Measure configured context');
-    assert.deepEqual(steps.measure, ['trials-record', 'trials-read']);
+    assert.deepEqual(written(steps.measure), ['trials-record', 'trials-read']);
     const measured = await textOf(card(first, trialA)), lines = measured.split('\n');
     for (const label of Object.values(DIMENSION_LABELS)) assert.ok(lines.some(line => line.startsWith(`${label}: `)), `An overhead row starts with its label: ${label}`);
     assert.ok(lines.includes('Indexing: not observed') && lines.includes('Maintenance: not observed'), 'A dimension with nothing recorded is not observed.');
@@ -273,7 +276,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     assert.ok((await textOf(card(first, trialC))).includes('Comparison conditions: Same client, larger module, fresh checkout.'));
     await press(first, trialC, 'Start');
     steps.keep = await press(first, trialC, 'Keep');
-    assert.deepEqual(steps.keep, ['trials-record', 'trials-read']);
+    assert.deepEqual(written(steps.keep), ['trials-record', 'trials-read']);
     const keptText = await textOf(card(first, trialC));
     assert.ok(keptText.includes('Kept. The evidence is inconclusive: this does not show an improvement.'), keptText);
     assert.doesNotMatch(keptText, /Kept\. The trial met the quality bar|Kept without/);

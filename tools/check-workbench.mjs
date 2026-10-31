@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { installConsumer, resolvePackage } from './packages.mjs';
 import { pageAssets, serviceAssets } from './server/assets.mjs';
+import { buildCss } from './build-css.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
 import { snapshotCoreHome, compareCoreHome, describeCoreHomeChange } from './core-home-guard.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,6 +20,8 @@ const extraFiles = Object.fromEntries(readdirSync(join(repo, 'tools/consumer'))
   .map(name => [`consumer/${name}`, join(repo, 'tools/consumer', name)]));
 // The backend worker callService runs inside the consumer.
 for (const asset of serviceAssets(repo)) if (asset.to.startsWith('service/') || asset.to.startsWith('workbench/')) extraFiles[asset.to] = join(repo, asset.from);
+// A fresh checkout has no built Tailwind; the browser journeys need the page as it is styled.
+await buildCss(repo);
 for (const asset of pageAssets(repo)) extraFiles[`page/${asset.to}`] = join(repo, asset.from);
 for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${name}`] = join(repo, 'schemas', name);
 // npm run exports user allow-scripts as an environment option. npm rejects that
@@ -108,9 +111,11 @@ if (process.exitCode === 0) {
   process.exitCode = integrated.status ?? 1;
 }
 if (process.exitCode === 0) {
-  // Its own budget: real Core lifecycle cases use several serial filesystem rounds and process restarts on Windows.
+  // Its own budget: real Core lifecycle cases use several serial filesystem rounds and process restarts on Windows, and
+  // every case runs in both themes. One theme measured about 690s on Linux (four ECC set installs for the UI168 update
+  // among them), so the stage budget is 30 minutes.
   const installed = spawnSync(process.execPath, [join(repo, 'tools/check-installed-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 720_000, env: isolated,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 1_800_000, env: isolated,
   });
   writeFileSync(join(output, 'installed-panel-check.log'), `${installed.stdout ?? ''}${installed.stderr ?? ''}`);
   process.stdout.write(installed.stdout ?? ''); process.stderr.write(installed.stderr ?? '');

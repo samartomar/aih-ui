@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
 import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 async function openPage(browser, origin, theme) {
@@ -20,7 +21,7 @@ async function openPage(browser, origin, theme) {
   return { context, page };
 }
 
-export async function runUi168InterruptStartBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
+export async function runUi168InterruptStartBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -38,6 +39,13 @@ export async function runUi168InterruptStartBrowser({ origin, output, playwright
     const applying = page.waitForRequest(request => request.url().endsWith('/api/authoring-apply'));
     await page.locator('#install-button').click();
     await applying;
+    // The host is killed as soon as this returns: only once Core's Apply has begun (the interrupting host's marker) is
+    // there an interrupted run for Core to report; a request still in flight would leave nothing behind.
+    const started = join(project, 'apply-started');
+    for (let waited = 0; !existsSync(started); waited += 50) {
+      if (waited > 60_000) throw new Error('Core never began the Apply the page requested');
+      await new Promise(done => setTimeout(done, 50));
+    }
     await context.close();
     return { status: 'passed', saved };
   } finally { await browser.close(); }
@@ -55,13 +63,15 @@ export async function runUi168InterruptedVerifyBrowser({ origin, output, saved, 
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyWorkspace(page); await openPolicyFileActions(page);
     await page.locator('#policy-open').setInputFiles(saved);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    // Scoped to the drawer, as elsewhere: naming every button of the full catalog page can outlast the click's timeout.
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     await closePolicyDrawer(page); await openPolicyDrawer(page);
     const interrupted = page.locator('[data-installed-state="interrupted"]').first();
     await interrupted.waitFor();
-    assert.match(await interrupted.innerText(), /Install interrupted/);
-    assert.ok(await interrupted.getAttribute('title') ?? await interrupted.locator('[title]').first().getAttribute('title'));
+    assert.match(await interrupted.innerText(), /Install didn't finish; \d+ files written$/);
+    // Amendment 3.2.3 drops the chip tooltips: the chip's words are all it says.
+    assert.equal(await interrupted.evaluate(chip => chip.hasAttribute('title') || chip.querySelector('[title]') !== null), false, 'the state chip carries no tooltip');
     const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
     await group.waitFor();
     if (action === 'finish') {
@@ -73,7 +83,9 @@ export async function runUi168InterruptedVerifyBrowser({ origin, output, saved, 
       assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
     } else {
       await group.getByRole('button', { name: 'Remove', exact: true }).click();
-      await group.getByRole('button', { name: 'Confirm remove', exact: true }).click();
+      // A removal Core cannot confirm offers no Confirm; say what the page showed instead of only timing out.
+      await group.getByRole('button', { name: 'Confirm remove', exact: true }).click().catch(async error => {
+        throw new Error(`${error.message}\nThe page said: ${await page.locator('#installed-message').innerText().catch(() => '')}\n${await group.innerText().catch(() => '')}`); });
       await page.locator('#installed-message[data-outcome="removed"], #installed-message[data-outcome="failed"]').waitFor({ timeout: 120_000 });
       assert.equal(await page.locator('#installed-message').getAttribute('data-outcome'), 'removed', `${await page.locator('#installed-message').innerText()} ${JSON.stringify(applies)}`);
       assert.match(await page.locator('#installed-message').innerText(), /grill-me: removed/);

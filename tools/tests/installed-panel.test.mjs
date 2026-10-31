@@ -158,3 +158,81 @@ test('Remove this set names what keeps a member: the user\'s own choice, or the 
   assert.equal(keptWords(entries[0].keptFor, 'rules', () => undefined, entries[0].chosen), 'Kept; you also chose it yourself');
   assert.equal(keptWords(entries[1].keptFor, 'rules', () => undefined, entries[1].chosen) ?? stillNeededWords(entries[1].neededBy), 'Kept; still needed by tdd');
 });
+
+// A read of the installed list that was still out when the person opened a Remove or Update preview must not redraw the
+// rows (dropping the preview and its Confirm); the list is read again once the preview closes.
+async function heldReadPanel({ updateState = 'current', hold = 2 } = {}) {
+  const { createInstalledPanel } = await import('../../src/app/installed-panel.js');
+  const live = (tag, className = '', text) => {
+    const node = fake(tag, className, text); const handlers = [];
+    node.addEventListener = (type, handler) => { if (type === 'click') handlers.push(handler); };
+    node.click = async () => { for (const handler of handlers) await handler(); };
+    return node;
+  };
+  const button = (label, action) => { const node = live('button', '', label); node.addEventListener('click', action); return node; };
+  const selection = { managementId: 'm-1', scope: 'project', name: 'One', item: { framework: 'ecc', itemId: 'one' }, origins: [{ reasonIncluded: 'chosen' }],
+    installState: 'complete', updateState, members: [{ kind: 'file', path: '/project/one.md', fileState: 'matches' }] };
+  const inventory = { status: 'complete', selections: [selection] };
+  let reads = 0, release;
+  const held = new Promise(resolve => { release = resolve; });
+  const client = {
+    catalog: { executionAvailable: true, items: [{ id: 'one', root: { releaseSha256: 'r'.repeat(64), itemId: 'one', configuration: {} } }], frameworks: [] },
+    intent: { roots: [] }, bytes: new TextEncoder().encode(JSON.stringify({ mode: 'vibe', selections: [] })), tool: 'claude',
+    // The second read is held open until the test releases it; every other read answers at once.
+    requestCurrent: async () => { reads += 1; if (reads === hold) { await held; } return inventory; },
+    requestHost: async operation => operation === 'remove'
+      ? { disposition: 'prepared', diagnostics: [], removals: [{ managementId: 'm-1', disposition: 'prepared', change: 'remove-selection', diagnostics: [],
+          members: [{ kind: 'file', path: '/project/one.md', action: 'remove', operationId: 'lifecycle/remove-0' }] }],
+        preparation: { status: 'ready', sessionId: 'session-1', review: { reviewDigest: 'digest-1', operations: [] } } }
+      : { disposition: 'unavailable', diagnostics: [{ message: 'Update unavailable fixture' }] },
+  };
+  const panel = createInstalledPanel({ client, el: live, button });
+  await panel.refresh();
+  const find = text => walk(panel.node).find(node => node.tag === 'button' && node.textContent === text);
+  return { panel, find, release: () => release(), reads: () => reads };
+}
+
+test('a read still out when Remove opens its preview leaves the preview and its Confirm, and the list is read again after Cancel', async () => {
+  const { panel, find, release, reads } = await heldReadPanel();
+  const pending = panel.refresh();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads(), 2, 'the second read is out');
+  await find('Remove').click();
+  assert.ok(find('Confirm remove'), 'the preview is open');
+  release(); await pending;
+  assert.ok(find('Confirm remove'), 'the read that finished after the preview opened did not redraw the rows');
+  assert.equal(reads(), 2);
+  await find('Cancel').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads(), 3, 'the deferred read is made once the preview closes');
+  assert.equal(find('Confirm remove'), undefined);
+});
+
+test('a read still out when Update opens its preview leaves the preview, and the list is read again after Cancel', async t => {
+  // The "Update available" chip draws its icon through the shared DOM helper.
+  const previous = globalThis.document;
+  globalThis.document = { createElement: tag => fake(tag) };
+  t.after(() => { globalThis.document = previous; });
+  const { panel, find, release, reads } = await heldReadPanel({ updateState: 'update-available' });
+  const pending = panel.refresh();
+  await new Promise(resolve => setImmediate(resolve));
+  await find('Update').click();
+  assert.ok(find('Confirm update'), 'the update preview is open');
+  release(); await pending;
+  assert.ok(find('Confirm update'), 'the read that finished after the preview opened did not redraw the rows');
+  assert.equal(reads(), 2);
+  await find('Cancel').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads(), 3, 'the deferred read is made once the preview closes');
+});
+
+test('a read asked for while a preview is open waits for it, and clear() forgets the preview and the deferred read', async () => {
+  const { panel, find, reads } = await heldReadPanel({ hold: 0 });
+  await find('Remove').click();
+  await panel.refresh();
+  assert.equal(reads(), 1, 'no read while the preview is open');
+  assert.ok(find('Confirm remove'));
+  panel.clear();
+  await panel.refresh();
+  assert.equal(reads(), 2, 'after clear() the next read runs at once');
+});

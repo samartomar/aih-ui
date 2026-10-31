@@ -1,7 +1,7 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,7 +13,9 @@ import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs
 import { runFirstRunBrowser, runRestartInstallBrowser, runRestartVerifyBrowser, runMcpFailedApplyBrowser, runMcpApplyBrowser, runStaleReviewBrowser } from './consumer/ui165-acceptance-browser.mjs';
 import { runProjectFolderBrowser } from './consumer/project-folder-browser.mjs';
 import { runMcpFailedRunBrowser } from './consumer/ui165-failed-run-browser.mjs';
-import { noteInventory, runUi168UpdateInstallBrowser, runUi168UpdateVerifyBrowser } from './consumer/ui168-update-browser.mjs';
+import { runUi168UpdateVerifyBrowser } from './consumer/ui168-update-browser.mjs';
+import { runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
+import { stageNewerCatalog } from './newer-catalog.mjs';
 import { runUi168ProjectBasicsBrowser, runUi168BlockDriftBrowser } from './consumer/ui168-project-basics-browser.mjs';
 import { runUi168SetRemovalBrowser } from './consumer/ui168-set-removal-browser.mjs';
 import { runUi168InterruptStartBrowser, runUi168InterruptedVerifyBrowser } from './consumer/ui168-interrupted-browser.mjs';
@@ -55,7 +57,7 @@ try {
 // on the same target, account home and settings. An in-process server recreation is not a process restart and
 // is never described as one. A case the public fixtures cannot truthfully produce reports 'incomplete' and
 // exits 2, never a silent pass.
-async function withHost(project, { sources = undefined, noteVariant = undefined, interrupt = false, kill = false } = {}, run) {
+async function withHost(project, { sources = undefined, consumer = consumerDir, interrupt = false, kill = false } = {}, run) {
   await mkdir(project, { recursive: true });
   const caseRunDir = join(project, 'page');
   for (const asset of pageAssets(repo)) {
@@ -66,7 +68,7 @@ async function withHost(project, { sources = undefined, noteVariant = undefined,
   await writeFile(summaryPath, JSON.stringify(summary));
   const portPath = join(project, 'host.port'), configPath = join(project, 'host-config.json');
   await writeFile(configPath, JSON.stringify({
-    consumerDir, runDir: caseRunDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath, noteVariant, interrupt,
+    consumerDir: consumer, runDir: caseRunDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath, interrupt,
     env: { AIH_CONSUMER_PROJECT: project, ...(sources ? { AIH_FRAMEWORK_SOURCES: sources } : {}) },
   }));
   await rm(portPath, { force: true });
@@ -128,6 +130,11 @@ const mcpSources = join(mcpFixtureDir, 'sources.json');
 await writeFile(mcpSources, JSON.stringify(mcpFixture.scenarios.browse));
 const factsSources = join(mcpFixtureDir, 'facts-sources.json');
 await writeFile(factsSources, JSON.stringify(mcpFixture.scenarios.facts));
+// UI168 update: a Catalog pack built with Catalog's own generator from the installed Catalog, in which exactly one installed
+// ECC TypeScript rule changed. Without one the update cases are incomplete (exit 2), never passed.
+const uiUpdate = process.env.CATALOG_UPDATE_TGZ ? await stageNewerCatalog({ consumerDir, fixtureDir: mcpFixtureDir, sources: factsSources, name: 'ui168-update',
+  pack: resolve(process.env.CATALOG_UPDATE_TGZ), changes: /^ecc:ecc\.rule\.typescript\./ }) : undefined;
+if (!uiUpdate) process.exitCode = 2;
 // The mixed restart path adds one plain ECC item alongside grill-me, chosen by the fixture from positive
 // public fit + resolution facts. When no candidate passes those facts, the mixed criterion is explicitly
 // incomplete (exit 2) - Extensions-only is never reported as the mixed acceptance.
@@ -171,19 +178,56 @@ for (const theme of THEMES) {
   await withHost(mcpProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`MCP ticked Apply case (${theme})`, await runMcpApplyBrowser({ origin, output: join(consumerDir, `mcp-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
 
-  for (const edited of [false, true]) {
+  // UI168 update against a real newer Catalog (see the staging above). The clean project also shows the page's loading,
+  // unavailable and failed update states first: they replace only the host's answer and change nothing.
+  if (!uiUpdate) console.log(`UI168 update cases incomplete (${theme}): set CATALOG_UPDATE_TGZ to a Catalog pack in which exactly one installed ECC TypeScript rule changed.`);
+  else for (const edited of [false, true]) {
     const updateProject = join(consumerDir, `ui168-update-${theme}-${edited}-${randomUUID().slice(0, 8)}`);
-    await withHost(updateProject, { noteVariant: 'current' }, async origin =>
-      await caseOutcome(`UI168 update install (${theme}, edited=${edited})`, await runUi168UpdateInstallBrowser({ origin, output: join(consumerDir, `ui168-update-install-${theme}-${edited}`), playwrightModule: playwrightPath, theme })));
-    await withHost(updateProject, { noteVariant: 'updated' }, async origin =>
-      await caseOutcome(`UI168 reviewed update (${theme}, edited=${edited})`, await runUi168UpdateVerifyBrowser({ origin, output: join(consumerDir, `ui168-update-verify-${theme}-${edited}`), project: updateProject, playwrightModule: playwrightPath, theme, edited })));
-  }
-  for (const operationState of ['loading', 'unavailable', 'failed']) {
-    const updateStateProject = join(consumerDir, `ui168-update-state-${theme}-${operationState}-${randomUUID().slice(0, 8)}`);
-    await withHost(updateStateProject, { noteVariant: 'current' }, async origin =>
-      await runUi168UpdateInstallBrowser({ origin, output: join(consumerDir, `ui168-update-state-install-${theme}-${operationState}`), playwrightModule: playwrightPath, theme }));
-    await withHost(updateStateProject, { noteVariant: 'updated' }, async origin =>
-      await caseOutcome(`UI168 update ${operationState} state (${theme})`, await runUi168UpdateVerifyBrowser({ origin, output: join(consumerDir, `ui168-update-state-${theme}-${operationState}`), project: updateStateProject, playwrightModule: playwrightPath, theme, operationState })));
+    const installed = await withHost(updateProject, { sources: uiUpdate.installSources }, async origin =>
+      await runUpdateOneInstallBrowser({ origin, output: join(consumerDir, `ui168-update-install-${theme}-${edited}`), playwrightModule: playwrightPath, theme }));
+    if (installed.result?.status !== 'passed') throw new Error(`UI168 update install (${theme}, edited=${edited}) failed: ${JSON.stringify(installed.result)}`);
+    // The item's files where Core says it wrote them.
+    const target = installed.result.inventory.selections.find(selection => selection.item?.itemId === uiUpdate.itemId && selection.scope === 'project');
+    if (!target) throw new Error(`Core lists no installed ${uiUpdate.itemId}`);
+    const files = target.members.filter(member => member.kind === 'file').map(member => member.path);
+    if (!files.length) throw new Error(`Core lists no files for ${uiUpdate.itemId}`);
+    const read = async () => Object.fromEntries(await Promise.all(files.map(async path => [path, (await readFile(path)).toString('base64')])));
+    if (edited) await appendFile(files[0], '\nLocal edit must survive.\n');
+    const before = await read();
+    const output = join(consumerDir, `ui168-update-verify-${theme}-${edited}`);
+    await withHost(updateProject, { sources: uiUpdate.updateSources, consumer: uiUpdate.updatedConsumer }, async origin => {
+      // Unavailable and failed replace only the host's answer: nothing may change. Loading delays the real answer, so on
+      // the clean project it is the reviewed update itself.
+      if (!edited) for (const operationState of ['unavailable', 'failed']) {
+        await caseOutcome(`UI168 update ${operationState} state (${theme})`, await runUi168UpdateVerifyBrowser({ origin, output: join(consumerDir, `ui168-update-state-${theme}-${operationState}`),
+          playwrightModule: playwrightPath, theme, itemId: uiUpdate.itemId, operationState }));
+        if (JSON.stringify(await read()) !== JSON.stringify(before)) throw new Error(`the ${operationState} update state changed ${uiUpdate.itemId}'s files`);
+      }
+      const updated = await runUi168UpdateVerifyBrowser({ origin, output, playwrightModule: playwrightPath, theme,
+        itemId: uiUpdate.itemId, ...(edited ? { edited: files[0] } : { operationState: 'loading' }) });
+      await caseOutcome(`UI168 reviewed update (${theme}, edited=${edited})`, updated);
+      if (!edited) {
+        // Core now records the newer item and offers it no update.
+        const now = updated.after.selections.find(selection => selection.managementId === target.managementId);
+        if (!now || now.updateState === 'update-available' || now.item?.contentSha256 !== uiUpdate.newer.contentSha256 || now.item?.behaviourSha256 !== uiUpdate.newer.behaviourSha256)
+          throw new Error(`after the update Core records ${JSON.stringify({ updateState: now?.updateState, item: now?.item })}, not ${JSON.stringify(uiUpdate.newer)}`);
+      }
+    });
+    // At the paths Core reported: a refused update leaves every file as it was, the person's edit included; a reviewed
+    // update writes the newer content there.
+    const after = await read();
+    if (edited) {
+      if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error(`a refused update changed ${uiUpdate.itemId}'s files`);
+    } else {
+      // Each file Core reports is the newer Catalog's content material at that item-relative path, byte for byte. (Core
+      // decides which materials it delivers as the item's files: this rule's LICENSE is not one of them.)
+      for (const [path, bytes] of Object.entries(after)) {
+        const material = uiUpdate.newer.materials.filter(entry => path.replace(/\\/g, '/').endsWith(`/${entry.relPath}`));
+        const digest = createHash('sha256').update(Buffer.from(bytes, 'base64')).digest('hex');
+        if (material.length !== 1 || material[0].sha256 !== digest)
+          throw new Error(`${path} after the update (${digest}) is not the newer Catalog's material for it: ${JSON.stringify(uiUpdate.newer.materials)}`);
+      }
+    }
   }
 
   const basicsProject = join(consumerDir, `ui168-basics-${theme}-${randomUUID().slice(0, 8)}`);
@@ -191,13 +235,12 @@ for (const theme of THEMES) {
   await writeFile(join(basicsProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
   await withHost(basicsProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 project facts and install (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-basics-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
-  for (const factsState of ['loading', 'empty', 'unavailable', 'failed']) {
-    const factsStateProject = join(consumerDir, `ui168-facts-state-${theme}-${factsState}-${randomUUID().slice(0, 8)}`);
-    await mkdir(factsStateProject, { recursive: true });
-    await writeFile(join(factsStateProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
-    await withHost(factsStateProject, { sources: mcpSources }, async origin =>
-      await caseOutcome(`UI168 project facts ${factsState} state (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-facts-state-${theme}-${factsState}`), playwrightModule: playwrightPath, theme, factsState })));
-  }
+  // An empty project folder: Core's review carries no project facts. (Facts arrive with the review, so there is no
+  // separate loading, unavailable or failed facts state to show.)
+  const emptyFactsProject = join(consumerDir, `ui168-facts-state-${theme}-empty-${randomUUID().slice(0, 8)}`);
+  await mkdir(emptyFactsProject, { recursive: true });
+  await withHost(emptyFactsProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`UI168 project facts empty state (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-facts-state-${theme}-empty`), playwrightModule: playwrightPath, theme, factsState: 'empty' })));
   const driftProject = join(consumerDir, `ui168-drift-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(driftProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 managed block drift (${theme})`, await runUi168BlockDriftBrowser({ origin, output: join(consumerDir, `ui168-drift-evidence-${theme}`), project: driftProject, playwrightModule: playwrightPath, theme })));
@@ -227,7 +270,7 @@ for (const theme of THEMES) {
   for (const action of ['finish', 'remove']) {
     const interruptedProject = join(consumerDir, `ui168-interrupted-${theme}-${action}-${randomUUID().slice(0, 8)}`);
     const interrupted = await withHost(interruptedProject, { interrupt: true, kill: true }, async origin =>
-      await runUi168InterruptStartBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), playwrightModule: playwrightPath, theme }));
+      await runUi168InterruptStartBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), project: interruptedProject, playwrightModule: playwrightPath, theme }));
     await withHost(interruptedProject, {}, async origin =>
       await caseOutcome(`UI168 interrupted install ${action} (${theme})`, await runUi168InterruptedVerifyBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), saved: interrupted.result.saved, action, playwrightModule: playwrightPath, theme })));
   }

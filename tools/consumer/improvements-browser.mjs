@@ -25,6 +25,9 @@ const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
 const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript.';
 const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states', 'tool-host'];
+// Recording a dismissal or a show-again writes only the improvement record and re-checks. The drawer may also re-read the
+// chosen tool's host, read-only, while that host has given no answer (F15 retries an unavailable answer on each change).
+const RECORDING = ['improvements-record', 'improvements-check', 'tool-host'];
 const OPENED = /Saved draft reopened|Unresolved draft opened/;
 
 export async function runImprovementsBrowser({ origin, output, playwrightModule, settingsPath, sourcePath, frictionPath }) {
@@ -193,7 +196,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     // 4. Dismiss the TDD suggestion: it moves to Dismissed; saving the draft keeps the dismissal.
     steps.dismiss = await dismissLeading(first);
     assert.ok(steps.dismiss.includes('improvements-record'), steps.dismiss.join());
-    assert.deepEqual(steps.dismiss.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
+    assert.deepEqual(steps.dismiss.filter(operation => !RECORDING.includes(operation)), []);
     assert.equal(await groupCards(first, 'Dismissed').count(), 1);
     assert.equal(await groupCards(first, 'Dismissed').first().getAttribute('data-suggestion-id'), tddId, 'Dismissing keeps the identity.');
     assert.match(await textOf(groupCards(first, 'Dismissed').first()), /mentions “tests”/);
@@ -238,7 +241,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     await reveal(section(reopened));
     steps.showAgain = await act(reopened, () => groupCards(reopened, 'Dismissed').first().getByRole('button', { name: 'Show again', exact: true }).click());
     assert.ok(steps.showAgain.includes('improvements-record'));
-    assert.deepEqual(steps.showAgain.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
+    assert.deepEqual(steps.showAgain.filter(operation => !RECORDING.includes(operation)), []);
     assert.equal(await groupCards(reopened, 'Dismissed').count(), 0);
     const requested = groupCards(reopened, 'Leading suggestion').first();
     assert.equal(await requested.getAttribute('data-suggestion-id'), tddId);
@@ -303,7 +306,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     await reveal(section(contentPage));
     steps.contentDismiss = await act(contentPage, () => testPlan.getByRole('button', { name: 'Dismiss', exact: true }).click());
     assert.ok(steps.contentDismiss.includes('improvements-record'));
-    assert.deepEqual(steps.contentDismiss.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
+    assert.deepEqual(steps.contentDismiss.filter(operation => !RECORDING.includes(operation)), []);
     steps.contentSameReason = await suggestWith(contentPage, '');
     assert.deepEqual(steps.contentSameReason, ['improvements-check'], 'Suggesting the same content reason only reads.');
     const dismissedContent = groupCards(contentPage, 'Dismissed').filter({ hasText: 'Test plan note' });

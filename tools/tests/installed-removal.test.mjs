@@ -134,3 +134,73 @@ test("a removal whose answer never arrived is unknown, never Couldn't confirm it
   assert.deepEqual(result.results, []);
   assert.equal(calls.at(-1)[1].purpose, 'remove');
 });
+
+// Core's removal preparation 1.2.0 (Core dev.53+): a supporting item the request frees without naming it (here the
+// shared notices) is removed with the removal that freed it, and that entry lists its members. The run result then
+// names those members under the freed item's own management id; they are tied back to the entry by operationId.
+const grill = { name: 'grill-me', managementId: 'project--aihq.catalog--extensions.matt.grill-me', scope: 'project' };
+const grilling = { name: 'grilling', managementId: 'project--aihq.catalog--extensions.matt.grilling', scope: 'project' };
+const NOTICES = 'project--aihq.catalog--extensions.notices';
+const folded = {
+  schema: 'urn:aihq:core:managed-removal-preparation:1.2.0', disposition: 'prepared', target: { project: '/project' }, scope: 'project', mode: 'vibe', diagnostics: [],
+  removals: [
+    { managementId: grill.managementId, disposition: 'prepared', change: 'remove-selection', diagnostics: [], members: [
+      { kind: 'file', path: '/project/.claude/skills/grill-me/SKILL.md', action: 'remove', operationId: 'lifecycle/remove-0' },
+      // The freed notices, folded under the removal that freed them.
+      { kind: 'file', path: '/project/.claude/skills/grill-me/extensions.notices/NOTICE.md', action: 'remove', operationId: 'lifecycle/remove-1' },
+      { kind: 'file', path: '/project/.claude/skills/grill-me/extensions.notices/LICENSE', action: 'remove', operationId: 'lifecycle/remove-2' }] },
+    // Interrupted before any of its files were written: Core prepares it with no members.
+    { managementId: grilling.managementId, disposition: 'prepared', change: 'remove-selection', diagnostics: [], members: [] }],
+  reviewDigest: 'digest-1',
+  preparation: { status: 'ready', sessionId: 'session-1', review: { reviewDigest: 'digest-1', operations: [] } },
+};
+const foldedRun = check => ({ schema: 'urn:aihq:core:run-result:1.4.0', completion: 'complete', diagnostics: [], members: [
+  { operationId: 'lifecycle/remove-0', selectionId: null, managementId: grill.managementId, scope: 'project', kind: 'file', path: '/project/.claude/skills/grill-me/SKILL.md', intent: 'remove', outcome: 'claim-removed', check: 'absent' },
+  { operationId: 'lifecycle/remove-1', selectionId: null, managementId: NOTICES, scope: 'project', kind: 'file', path: '/project/.claude/skills/grill-me/extensions.notices/NOTICE.md', intent: 'remove', outcome: 'claim-removed', check },
+  { operationId: 'lifecycle/remove-2', selectionId: null, managementId: NOTICES, scope: 'project', kind: 'file', path: '/project/.claude/skills/grill-me/extensions.notices/LICENSE', intent: 'remove', outcome: 'claim-removed', check: 'absent' }] });
+
+test('a freed item folded under the removal that freed it counts toward that removal, and an empty prepared removal completes as removed', async () => {
+  const request = async operation => operation === 'remove' ? folded : foldedRun('absent');
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  assert.equal(preview.canConfirm, true);
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'removed');
+  assert.equal(result.message, 'grill-me: removed grilling: removed');
+});
+
+test('a folded freed member Core could not confirm absent leaves the removal that freed it unconfirmed', async () => {
+  const request = async operation => operation === 'remove' ? folded : foldedRun('present');
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.results[0].message, /^grill-me: Couldn't confirm it's gone\./);
+  assert.equal(result.results[1].message, 'grilling: removed');
+});
+
+test('an empty prepared removal is not confirmed by an incomplete run', async () => {
+  const request = async operation => operation === 'remove' ? folded : { ...foldedRun('absent'), completion: 'partial' };
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.match(result.results[1].message, /^grilling: Couldn't confirm it's gone\./);
+});
+
+test("a reviewed member missing from Core's run leaves the removal unconfirmed, even when every member the run names is gone", async () => {
+  // The run reports SKILL.md and NOTICE.md absent but says nothing of the LICENSE the review listed.
+  const run = foldedRun('absent'); run.members = run.members.filter(member => member.operationId !== 'lifecycle/remove-2');
+  const request = async operation => operation === 'remove' ? folded : run;
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.results[0].message, /^grill-me: Couldn't confirm it's gone\./);
+});
+
+test('a reviewed member without an operationId is matched in the run by its path', async () => {
+  const byPath = structuredClone(folded); for (const member of byPath.removals[0].members) member.operationId = null;
+  const run = foldedRun('absent'); for (const member of run.members) member.managementId = grill.managementId;
+  const request = async operation => operation === 'remove' ? byPath : run;
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  assert.equal((await confirmRemoval({ preview, request, mode: 'vibe' })).message, 'grill-me: removed grilling: removed');
+  run.members.pop();
+  const missing = await confirmRemoval({ preview: await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' }), request, mode: 'vibe' });
+  assert.match(missing.results[0].message, /^grill-me: Couldn't confirm it's gone\./);
+});

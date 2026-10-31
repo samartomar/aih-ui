@@ -29,26 +29,19 @@ export async function runUi168ProjectBasicsBrowser({ origin, output, playwrightM
     await page.locator('#framework-navigation button[data-framework^="internal:project-basics"]').click();
     if (!await page.locator('#browse-all-items').isChecked()) await page.locator('#browse-all-items').check();
     await page.locator('#cards-grid [data-card-id]').first().waitFor();
-    if (factsState === 'loading') await page.route('**/api/authoring-project-facts', async route => { await new Promise(done => setTimeout(done, 500)); await route.continue(); });
-    if (factsState === 'unavailable') await page.route('**/api/authoring-project-facts', route => route.fulfill({ json: { status: 'invalid', facts: null, diagnostics: [{ message: 'Facts unavailable fixture' }] } }));
-    if (factsState === 'failed') await page.route('**/api/authoring-project-facts', route => route.abort());
-    if (factsState === 'empty') await page.route('**/api/authoring-project-facts', route => route.fulfill({ json: { status: 'complete', facts: [], diagnostics: [] } }));
     await addFromCatalog(page, 'project-basics.working-rules');
     await openPolicyDrawer(page);
     await page.locator('#install-details > summary').click();
-    if (factsState === 'loading') {
-      await page.locator('#install-project-facts').filter({ hasText: 'Loading project facts…' }).waitFor();
-      await page.locator('#install-project-facts').filter({ hasText: 'Detected: ' }).waitFor();
-    }
+    // Project facts are the ones Core's prepared review carries (there is no separate facts request): an empty project
+    // folder truly has none, and the page says so.
+    await page.locator('#install-project-facts').filter({ hasText: factsState === 'empty' ? 'No project facts found' : 'Detected: ' }).waitFor();
     const facts = await page.locator('#install-project-facts').innerText();
-    if (factsState === 'unavailable') assert.match(facts, /Project facts unavailable: Facts unavailable fixture/);
-    else if (factsState === 'failed') assert.match(facts, /Project facts failed:/);
-    else if (factsState === 'empty') assert.match(facts, /No project facts detected or inferred/);
+    if (factsState === 'empty') assert.equal(facts.trim(), 'No project facts found');
     else {
       assert.match(facts, /Detected: /, facts);
       assert.match(facts, /Inferred: /, facts);
     }
-    if (['unavailable', 'failed', 'empty'].includes(factsState)) {
+    if (factsState === 'empty') {
       await writeFile(join(output, `project-facts-${factsState}-${theme}.json`), JSON.stringify({ status: 'passed', state: factsState, facts }, null, 2));
       return { status: 'passed' };
     }
@@ -85,7 +78,8 @@ export async function runUi168BlockDriftBrowser({ origin, output, project, playw
     const drift = page.locator('[data-installed-state="block-changed"]');
     await drift.waitFor();
     assert.match(await drift.innerText(), /The AIH block in AGENTS\.md was edited/);
-    assert.ok(await drift.getAttribute('title') ?? await drift.locator('[title]').first().getAttribute('title'));
+    // Amendment 3.2.3 drops the chip tooltips: the chip's words are all it says.
+    assert.equal(await drift.evaluate(chip => chip.hasAttribute('title') || chip.querySelector('[title]') !== null), false, 'the state chip carries no tooltip');
     await page.screenshot({ path: join(output, `project-basics-drift-${theme}.png`), fullPage: true });
     await writeFile(join(output, `project-basics-drift-${theme}.json`), JSON.stringify({ status: 'passed', drift: await drift.innerText(), errors }, null, 2));
     assert.deepEqual(errors, []);
