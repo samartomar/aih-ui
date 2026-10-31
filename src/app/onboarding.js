@@ -1,5 +1,5 @@
 import { el, collectIds } from "./dom.js";
-import { NOT_SUPPORTED_YET, listedTools, readToolList, setupToolsNotice, toolLabels, toolNames } from "./tool-list.js";
+import { NOT_SUPPORTED_YET, listedTools, setupToolsNotice, toolLabels, toolList as sharedToolList, toolNames } from "./tool-list.js";
 import { REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
@@ -8,7 +8,8 @@ const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What
 const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", clients: "Your tools", review: "Review" };
 
 // onSaved: the person saved setup just now (first run or an edit), after onComplete has applied it.
-export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit = () => {} }) {
+// toolList: the page's one shared read of Core's tool list; its answers arrive through setTools (src/main.js).
+export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit = () => {}, toolList = sharedToolList }) {
   const elements = collectIds(["setup-dialog", "setup-title", "setup-description", "setup-fixed-experience", "setup-progress", "setup-content", "setup-error", "setup-back", "setup-next", "setup-skip", "setup-cancel", "setup-form"]);
   let draft = newSetupSettings();
   let editing = false;
@@ -18,9 +19,9 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
   // Core's tool list, the one the header's Your tools shows (src/app/tool-list.js): null until it is read.
   let tools = null;
   let labels = {};
-  // While the list is on its way the step says only that; the notice that the tools couldn't be loaded is for a failure.
-  let toolsNotice = null;
-  let toolsRead = null;
+  // Before any answer the step says the list is loading; after a failure, that it couldn't be loaded. Both say the
+  // person can go on and choose later from Settings.
+  let toolsNotice = setupToolsNotice(undefined);
   let savedProblem = null;
   let loading = true;
   let saving = false;
@@ -99,8 +100,8 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
   function renderClients() {
     elements.setupDescription.textContent = "Choose every AI tool you use; most people use several. Choosing one doesn't install it or check that it's connected. A tool marked Not supported yet stays chosen; the Workbench can't check or install content for it yet.";
     if (!tools?.length) {
-      const notice = el("p", "setup-notice", toolsNotice ?? "Loading your tools…");
-      notice.setAttribute("role", toolsNotice ? "alert" : "status");
+      const notice = el("p", "setup-notice", toolsNotice);
+      notice.setAttribute("role", tools === null && toolsNotice !== setupToolsNotice(undefined) ? "alert" : "status");
       elements.setupContent.append(notice);
       return;
     }
@@ -278,9 +279,9 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
     savedProblem = null;
     reviewerKind = "individual";
     step = 0;
-    // Setup reads Core's tool list itself too (the host answers both reads from one listTools call), so its step never
-    // depends on another control handing the list over. Whichever answer comes first is shown.
-    if (!tools?.length && !toolsRead) toolsRead = readToolList().then(setTools).finally(() => { toolsRead = null; });
+    // Ask for the page's shared tool list: it starts the read if none is on its way, and reads again if the last answer
+    // was a failure (setup re-opened from Settings). The answer reaches this step and the header alike.
+    void toolList.load();
     if (!elements.setupDialog.open) elements.setupDialog.showModal();
     render();
     try {

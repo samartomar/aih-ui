@@ -867,11 +867,17 @@ the browser (`wb-your-tools-changes`), each change made against what is stored a
 that moment and shared with other tabs through the `storage` event, so no tab can
 overwrite setup's tools. A header untick lasts until setup is next saved: saving
 setup clears every untick, so all of setup's tools are chosen again. An older
-saved header choice is migrated once, as additions. Setup reads the tool list
-itself as well as taking the header's answer, and shows it whenever it arrives;
-while it is on its way the step says only that it is loading. Only when the host's
-answer is a failure does setup say, in fixed words, that the tools couldn't be
-loaded, keeping the tools already chosen. A tool
+saved header choice is migrated once, as additions. The page reads the tool list
+once, as its first request, and setup, the header, the rail, the catalog and the
+organisation author all hear that one read, so they never disagree. A read with no
+answer within 20 seconds is a failure, and a failure is retried once for everyone
+before anyone hears of it. While the list is on its way setup says it is loading
+and that the person can continue and choose tools later from Settings; after a
+failure it says, in fixed words, that the tools couldn't be loaded, keeping the
+tools already chosen. A list that arrives later, or when setup is re-opened from
+Settings after a failure, updates the step and the header. The host reads the
+list at start-up and answers GET /api/tools from memory, so it never waits behind
+the authoring host's heavier work. A tool
 Core does not support yet stays chosen and
 says "Not supported yet"; no raw tool id or Core function name is shown. Setup's
 tools are changed from Settings (**Edit your tools**). The FRAMEWORKS rail's

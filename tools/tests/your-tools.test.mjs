@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createYourTool, YOUR_TOOLS_CHANGES_KEY, YOUR_TOOLS_KEY, YOUR_TOOL_KEY } from '../../src/app/your-tool.js';
 import { toolFit } from '../../src/catalog/tool-fit.js';
+import { createToolListStore } from '../../src/app/tool-list.js';
 import { itemBrowseFacts } from '../../src/catalog/browse-facts.js';
 
 class Node {
@@ -31,21 +32,22 @@ const REGISTRY = [
 // Browser-wide listeners (the `storage` event a second tab's write fires here), shared by every mounted instance.
 const windowListeners = [];
 const fireStorage = (key, except) => { for (const [instance, listener] of windowListeners) if (instance !== except) listener({ key }); };
-async function mount(t, { saved = {}, store = new Map(Object.entries(saved)) } = {}) {
+async function mount(t, { saved = {}, store = new Map(Object.entries(saved)), toolList = createToolListStore(), answers } = {}) {
   const previous = { document: globalThis.document, localStorage: globalThis.localStorage, fetch: globalThis.fetch, addEventListener: globalThis.addEventListener };
   globalThis.document = { createElement: tag => new Node(tag), createElementNS: (_namespace, tag) => new Node(tag), addEventListener() {}, activeElement: null };
   globalThis.localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)), removeItem: key => store.delete(key) };
   const instance = {};
   globalThis.addEventListener = (name, listener) => { if (name === 'storage') windowListeners.push([instance, listener]); };
   t.after(() => windowListeners.splice(0, windowListeners.length, ...windowListeners.filter(([owner]) => owner !== instance)));
-  globalThis.fetch = async path => ({ ok: true, json: async () => path === '/api/tools' ? { ok: true, state: 'published', tools: REGISTRY } : { ok: true, state: 'inspected', tools: [], observations: [] } });
+  globalThis.fetch = async path => path === '/api/tools' && answers?.length ? answers.shift()() : ({ ok: true, json: async () => path === '/api/tools' ? { ok: true, state: 'published', tools: REGISTRY } : { ok: true, state: 'inspected', tools: [], observations: [] } });
   t.after(() => Object.assign(globalThis, previous));
   const elements = Object.fromEntries(['yourToolTrigger', 'yourToolIcon', 'yourToolName', 'yourToolPop', 'yourToolList', 'yourToolNote'].map(name => [name, new Node()]));
   elements.yourToolPop.hidden = true;
   const changes = [];
-  const control = createYourTool({ elements, onChange: tools => changes.push(tools.map(tool => tool.id)) });
+  // Each mounted page has its own shared tool list, as each browser page does.
+  const control = createYourTool({ elements, onChange: tools => changes.push(tools.map(tool => tool.id)), toolList });
   await control.start();
-  return { elements, control, changes, store, instance };
+  return { elements, control, changes, store, instance, toolList };
 }
 
 test('Your tools is a multi-select: each tool is a checkbox and ticking a second keeps the first', async t => {
@@ -145,6 +147,17 @@ test('two tabs sharing one store: a stale tab never drops a tool setup chose in 
   // A tick in A after B's untick keeps B's untick: each change is made against what is stored now.
   rows(a.elements).find(row => row.dataset.tool === 'kiro').listeners.click();
   assert.deepEqual(JSON.parse(store.get(YOUR_TOOLS_CHANGES_KEY)), { unticked: ['codex'], added: ['kiro'] });
+});
+
+test('a list that fails twice shows the failure; a later load of the shared list (setup re-opened) updates the header', async t => {
+  const fail = () => { throw new Error('Failed to fetch'); };
+  const { elements, control, toolList, changes } = await mount(t, { answers: [fail, fail] });
+  assert.equal(elements.yourToolTrigger.dataset.yourTool, 'failed', 'the first read and its one retry both failed');
+  control.setSetupClients(['claude']);
+  await toolList.load();
+  assert.equal(elements.yourToolTrigger.dataset.yourTool, 'listed');
+  assert.deepEqual(control.current().map(tool => tool.id), ['claude'], 'the tool chosen in setup is chosen once the list arrives');
+  assert.deepEqual(changes.at(-1), ['claude']);
 });
 
 // Core's answers for one item across three chosen tools: Claude Code has no project location for it, Codex fits.
