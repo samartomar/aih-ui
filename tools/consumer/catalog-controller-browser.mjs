@@ -131,11 +131,13 @@ async function setAdd() {
   await page.evaluate(() => window.ui165Controller.proposals[1].resolve({ status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: 'Exact set refusal.' }] }));
   await guidance.filter({ hasText: 'Exact set refusal.' }).waitFor();
   assert.equal(await add.getAttribute('aria-busy'), null);
-  // A host that does not answer is said in words, never a silent return to the idle guidance.
+  // A host that cannot be reached is said in the owner's words, never a silent return to the idle guidance, and never the
+  // failure's own text.
   await add.click();
   await guidance.filter({ hasText: 'Adding chosen sets…' }).waitFor();
-  await page.evaluate(() => window.ui165Controller.proposals[2].reject(new Error('Authoring host unavailable: fetch failed')));
-  await guidance.filter({ hasText: 'The chosen sets were not added: Authoring host unavailable: fetch failed. Your choices are unchanged; try Add again.' }).waitFor();
+  await page.evaluate(() => window.ui165Controller.proposals[2].reject(Object.assign(new Error('Authoring host unavailable: fetch failed (ECONNRESET)'), { unreachable: true, status: 502 })));
+  await guidance.filter({ hasText: "The chosen sets weren't added because the Workbench couldn't reach its host. Your choices are unchanged; use Add chosen sets again." }).waitFor();
+  assert.doesNotMatch(await page.locator('body').innerText(), /fetch failed|ECONNRESET|502|Authoring host unavailable/);
   assert.equal(await add.getAttribute('aria-busy'), null);
   assert.equal(await add.getAttribute('aria-disabled'), null);
   await page.close();

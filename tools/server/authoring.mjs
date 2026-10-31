@@ -2,6 +2,7 @@
 import { delimiter, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile, stat } from 'node:fs/promises';
+import { forward } from './forward.mjs';
 
 // Demonstration/test source only: it is labelled a test fixture and is never a real update source.
 // Demo/test host input: a small JSON file { "revisions": ["updated"] } naming note-fixture variants to publish
@@ -87,7 +88,7 @@ export async function createAuthoringAdapter(consumerDir, { frictionEvidence, co
     ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     ...(process.env.AIH_MAINTENANCE_SOURCE ? { maintenanceSource: await fileMaintenanceSource(consumerDir, process.env.AIH_MAINTENANCE_SOURCE) } : {}) });
   return {
-    catalog: async () => (await fetch(host.origin + '/api/authoring-catalog')).json(),
+    catalog: async () => JSON.parse((await forward(host.origin + '/api/authoring-catalog')).text),
     close: () => host.server.close(),
     async handle(request, response, pathname) {
       if (!pathname.startsWith('/api/authoring-')) return false;
@@ -101,12 +102,10 @@ export async function createAuthoringAdapter(consumerDir, { frictionEvidence, co
       }
       const headers = { 'content-type': request.headers['content-type'] ?? 'application/json', origin: host.origin };
       if (request.headers['x-aih-client']) headers['x-aih-client'] = request.headers['x-aih-client'];
-      const upstream = await fetch(host.origin + pathname, {
-        method: request.method, headers,
-        ...(request.method === 'POST' ? { body: request, duplex: 'half' } : {}),
-      });
+      // Each request has its own connection to the host (see forward.mjs), and is sent once.
+      const upstream = await forward(host.origin + pathname, { method: request.method, headers, ...(request.method === 'POST' ? { body: request } : {}) });
       response.writeHead(upstream.status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-      response.end(await upstream.text());
+      response.end(upstream.text);
       return true;
     },
   };

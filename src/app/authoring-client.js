@@ -82,12 +82,17 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     return send(operation, body);
   }
   async function send(operation, body) {
-    const response = await fetch(`/api/authoring-${operation}`, {
-      method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...(selectedTool ? { tool: selectedTool } : {}), ...(selectedTools.length > 1 ? { tools: selectedTools } : {}), ...body }),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? JSON.stringify(result));
+    // A request that fails says whether the host could not be reached (no answer, or the Workbench's 502/503/504) or
+    // answered in a way the page cannot use; callers say so in plain words (host-words.js) and never show this text.
+    let response;
+    try {
+      response = await fetch(`/api/authoring-${operation}`, {
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...(selectedTool ? { tool: selectedTool } : {}), ...(selectedTools.length > 1 ? { tools: selectedTools } : {}), ...body }),
+      });
+    } catch (error) { throw Object.assign(new Error(`The Workbench host was not reached: ${error.message}`), { unreachable: true, cause: error }); }
+    const result = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    if (!response.ok) throw Object.assign(new Error(result.error ?? JSON.stringify(result)), { unreachable: [502, 503, 504].includes(response.status), status: response.status });
     return result;
   }
   // Apply runs as a host job (a large setup takes Core minutes, beyond what one request may wait). The page asks for its

@@ -12,6 +12,7 @@ import { renderBrowseFacts, renderFrameworkRoutes } from './browse-facts.js';
 import { toolFit } from './tool-fit.js';
 import { organizationPolicyNotice, sourceAnswerWords } from './organization-policy.js';
 import { createStartingSets } from './starting-sets.js';
+import { setsNotAddedWords } from '../app/host-words.js';
 import { createFrameworkNavigation } from './frameworks.js';
 import { createCards } from "./cards.js";
 import { createDetails } from "./details.js";
@@ -140,8 +141,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       if (result.diagnostics?.some(value => value.code === 'ENTERPRISE_SETUP_REQUIRED')) return;
       setFeedback = { framework: framework?.sha256, tool, result, requests };
     } catch (error) {
-      // The host did not answer; the chosen sets were not added, and the page says so rather than going back to idle.
-      setFeedback = { framework: framework?.sha256, tool, requests, result: { status: 'failed', diagnostics: [{ message: `The chosen sets were not added: ${error.message.replace(/\.?$/, '.')} Your choices are unchanged; try Add again.` }] } };
+      // The request failed; the chosen sets were not added, and the page says so in plain words rather than going back to idle.
+      setFeedback = { framework: framework?.sha256, tool, requests, result: { status: 'failed', diagnostics: [{ message: setsNotAddedWords(error) }] } };
     } finally { addingSets = false; render(); }
   }
   // Asked once: the policy file and branch in the setup's repository. The host saves the source and reads it; the page

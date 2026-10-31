@@ -1,3 +1,4 @@
+import { notDoneWords } from './host-words.js';
 import { el } from './dom.js';
 import { createReviewIdentity } from './review-identity.js';
 import { createScanEvidence } from './scan-evidence.js';
@@ -82,7 +83,7 @@ export function createEvidenceReview(client, onProposal) {
   subjectSearch.addEventListener('input', fillSubjects);
   target.addEventListener('change', () => { inspect.disabled = !target.value || !evidence.options.length; });
   controls.append(inspect, action('Forget supplied evidence', async () => { invalidate(); file.value = ''; evidence.replaceChildren(); client.setReviewEvidence([]); if (await refresh()) status.textContent = 'Supplied evidence forgotten. Saved review history remains in the original artifact.'; }),
-  action('Reconsider saved reviews (optional)', async () => onProposal(await client.proposeRequest('reconsider-reviews'))));
+  action('Reconsider saved reviews (optional)', async () => { try { onProposal(await client.proposeRequest('reconsider-reviews')); } catch (error) { status.textContent = notDoneWords(error, { what: "Saved reviews weren't reconsidered", unchanged: 'Your setup is unchanged' }); } }));
   // Applicability is derived from the supplied evidence and identity, so either change re-reads the saved judgments.
   const refresh = async () => {
     const result = await client.refreshJudgments();
@@ -101,7 +102,8 @@ export function createEvidenceReview(client, onProposal) {
   const record = action('Propose human review', async () => {
     const binding = inspected?.bindings[Number(finding.value)]; if (!binding) return;
     const decision = { id: inputs.id.value, owner: { kind: ownerKind.value, id: inputs.owner.value }, actor: inputs.actor.value, recordedAt: new Date().toISOString(), disposition: disposition.value, reason: inputs.reason.value };
-    onProposal(await client.proposeRequest('record-review', { evidenceIndex: Number(evidence.value), target: inspected.target, finding: binding.finding, decision }));
+    try { onProposal(await client.proposeRequest('record-review', { evidenceIndex: Number(evidence.value), target: inspected.target, finding: binding.finding, decision })); }
+    catch (error) { status.textContent = notDoneWords(error, { what: "The review wasn't proposed", unchanged: 'Your setup is unchanged' }); }
   }); record.disabled = true;
   const syncRecord = () => { record.disabled = !inspected?.bindings?.length || finding.value === '' || Object.values(inputs).some(field => !field.value.trim()); };
   const fillFindings = () => { fillBoundedOptions({ select: finding, entries: (inspected?.bindings ?? []).map((binding, index) => ({ ...binding, index })), query: findingSearch.value,

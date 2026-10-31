@@ -395,3 +395,41 @@ test('no Your tools text on the page says a Core code, function name, registry o
     assert.doesNotMatch(text, /tool-not-observed|unknown-tool|gone-tool|AIH_[A-Z_]+|[A-Z]+_[A-Z_]+|registry|listTools/i, text);
   }
 });
+
+// The owner's sentence of 2026-10-31 for a set Add whose request failed, and the same plain form for every other change
+// the page asks its host for (card Add, Undo, Remove, configuration, reviews): what wasn't done, that nothing changed,
+// and what to do next. The failure's own text (transport error, status code, host message) never reaches the page.
+test("a change whose request failed says so in plain words, never the failure's own text", async t => {
+  const { SETS_NOT_ADDED, setsNotAddedWords, notDoneWords } = await import('../../src/app/host-words.js');
+  const quiet = t.mock.method(console, 'error', () => {});
+  assert.equal(SETS_NOT_ADDED, "The chosen sets weren't added because the Workbench couldn't reach its host. Your choices are unchanged; use Add chosen sets again.");
+  const reset = Object.assign(new Error('Authoring host unavailable: fetch failed (ECONNRESET)'), { unreachable: true, status: 502 });
+  assert.equal(setsNotAddedWords(reset), SETS_NOT_ADDED);
+  const refused = Object.assign(new Error('Same-origin authoring request required.'), { unreachable: false, status: 403 });
+  assert.equal(setsNotAddedWords(refused), "The chosen sets weren't added because the Workbench host couldn't handle the request. Your choices are unchanged; use Add chosen sets again.");
+  assert.equal(notDoneWords(reset, { what: "tdd wasn't added", again: 'use Add again' }),
+    "tdd wasn't added because the Workbench couldn't reach its host. Your setup is unchanged; use Add again.");
+  for (const error of [reset, refused, new Error('anything')]) assert.doesNotMatch(notDoneWords(error, { what: "That change wasn't made" }), /fetch failed|ECONNRESET|403|502|Same-origin|anything/);
+  assert.equal(quiet.mock.callCount(), 6, 'each failure is logged to the console, where its own text belongs');
+
+  // The page's propose and accept callers say these sentences; none shows a thrown error's message.
+  const callers = { 'src/catalog/controller.js': /setsNotAddedWords\(error\)/, 'src/app/authoring-workspace.js': /notDoneWords\(/, 'src/app/evidence-review.js': /notDoneWords\(/ };
+  for (const [path, says] of Object.entries(callers)) {
+    const text = readFileSync(path, 'utf8');
+    assert.match(text, says, path);
+    for (const call of text.matchAll(/[^\n]*\b(?:propose|proposeRequest)\([^\n]*/g)) assert.doesNotMatch(call[0], /error\.message/, `${path}: ${call[0].trim().slice(0, 120)}`);
+  }
+  const workspace = readFileSync('src/app/authoring-workspace.js', 'utf8');
+  assert.doesNotMatch(workspace, /diagnostics: \[\{ message: error\.message \}\]|const safe = [^\n]*error\.message/);
+  assert.doesNotMatch(readFileSync('src/catalog/controller.js', 'utf8'), /The chosen sets were not added: \$\{error/);
+});
+
+test('the authoring client says whether a failed request reached the host', async t => {
+  const prior = globalThis.fetch; t.after(() => { globalThis.fetch = prior; });
+  const client = createAuthoringClient({ sessionRecovery: false });
+  const failing = async answer => { globalThis.fetch = answer; return client.request('edit', {}).then(() => assert.fail('the request should fail'), error => error); };
+  assert.equal((await failing(async () => { throw new TypeError('fetch failed'); })).unreachable, true, 'no answer');
+  for (const status of [502, 503, 504]) assert.equal((await failing(async () => ({ ok: false, status, json: async () => ({ error: 'Authoring host unavailable: fetch failed' }) }))).unreachable, true, `${status}`);
+  for (const status of [400, 403]) assert.equal((await failing(async () => ({ ok: false, status, json: async () => ({ error: 'refused' }) }))).unreachable, false, `${status}`);
+  assert.equal((await failing(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('not JSON'); } }))).unreachable, true, 'a 502 page that is not JSON');
+});

@@ -30,6 +30,8 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const server = createStaticServer(runDir, async (request, response, pathname) => {
     try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await report.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
     catch (error) {
+      // The page says this in plain words; the cause is kept here, in the Workbench's log.
+      console.error(`Workbench: ${request.method} ${pathname} failed: ${error.message}${error.cause ? ` (${error.cause.code ?? error.cause.message})` : ''}`);
       response.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `Authoring host unavailable: ${error.message}${error.cause ? ` (${error.cause.code ?? error.cause.message})` : ""}` })); return true;
     }
   });

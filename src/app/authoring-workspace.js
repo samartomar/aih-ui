@@ -13,6 +13,7 @@ import { ENTERPRISE_SETUP_NOTICE, isJourneyEnvelope, importLimitError } from './
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
 import { addItem, addedMessage, chosenRoot, removeItem, undoAdd } from './one-click-add.js';
+import { notDoneWords } from './host-words.js';
 import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
@@ -68,7 +69,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   let selectedItem;
   const draftStatus = el('p', 'text-on-surface-variant break-words'); draftStatus.id = 'policy-draft-status'; draftStatus.setAttribute('role', 'status');
   const showStatus = message => { status.textContent = message; if (client.draft) draftStatus.textContent = message; };
-  const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
+  // A change whose request failed is said in plain words; the failure itself goes to the console (host-words.js).
+  const notDone = (error, what) => notDoneWords(error, { what, unchanged: `Your ${setupWord()} is unchanged` });
+  const safe = action => async () => { try { await action(); } catch (error) { showStatus(notDone(error, "That change wasn't made")); } };
   const originalDownload = button('Download original artifact', () => original && download(original, 'policy.original.json'));
   originalDownload.disabled = true;
   const goToPolicy = () => reviewPanel.open();
@@ -412,7 +415,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       row.append(actions);
       if (root.status !== 'unresolved') {
         row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: root.itemId, button,
-          review: async value => { try { present(await client.propose({ type: 'select', root: { ...refOf(root), configuration: value } })); } catch (error) { showStatus(error.message); } } }));
+          review: async value => { try { present(await client.propose({ type: 'select', root: { ...refOf(root), configuration: value } })); } catch (error) { showStatus(notDone(error, "The configuration wasn't changed")); } } }));
       }
       draftRoots.append(row);
     }
@@ -463,7 +466,10 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // browsing. A refusal, or a proposal the host returned with diagnostics, opens the review with its reasons instead.
   const notice = createAddedNotice({ el, button });
   const setupWord = () => client.draft ? 'draft' : 'setup';
-  const thrown = error => ({ status: 'refused', result: { status: 'refused', diagnostics: [{ message: error.message }] } });
+  const thrown = error => ({ status: 'unanswered', error });
+  // A request that failed: one plain sentence, and the review panel stays as it was.
+  const unanswered = (outcome, what, again) => outcome.status === 'unanswered'
+    && (notice.hide(), showStatus(notDoneWords(outcome.error, { what, unchanged: `Your ${setupWord()} is unchanged`, again })), true);
   function openReview(outcome, refusedText, reviewText) {
     notice.hide(); present(outcome.result);
     if (outcome.status === 'refused') { showStatus(`${refusedText} ${failure(outcome.result)}`); reviewPanel.open(); }
@@ -475,6 +481,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   async function add(item) {
     const name = item.label ?? item.id;
     const outcome = await addItem(client, item).catch(thrown);
+    if (unanswered(outcome, `${name} wasn't added`, 'use Add again')) return;
     if (outcome.status === 'superseded' || outsideOrganisation(outcome)) return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'added') return openReview(outcome, `Nothing was added: ${name} was refused.`, `${name} is not added yet. Read what the check reported, then Add to setup or Cancel.`);
@@ -484,6 +491,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   }
   async function undo(name, root) {
     const outcome = await undoAdd(client, root).catch(thrown);
+    if (unanswered(outcome, `Undo for ${name} wasn't done`, 'use Undo again')) return;
     if (outcome.status === 'superseded') return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'removed') return openReview(outcome, `Undo did not change your ${setupWord()}.`, `Undo for ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
@@ -495,6 +503,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   async function remove(item) {
     const name = item.label ?? item.id;
     const outcome = await removeItem(client, item).catch(thrown);
+    if (unanswered(outcome, `${name} wasn't removed`, 'use Remove again')) return;
     if (outcome.status === 'superseded' || outsideOrganisation(outcome)) return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
@@ -504,6 +513,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   }
   async function addBack(name, item) {
     const outcome = await addItem(client, item).catch(thrown);
+    if (unanswered(outcome, `Undo for ${name} wasn't done`, 'use Undo again')) return;
     if (outcome.status === 'superseded' || outsideOrganisation(outcome)) return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'added') return openReview(outcome, `Undo did not change your ${setupWord()}: ${name} was refused.`, `Undo for ${name} is not done yet. Read what the check reported, then Add to setup or Cancel.`);
@@ -582,7 +592,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       const row = el('div', 'p-2 border border-wb-border rounded space-y-1');
       row.append(el('p', 'font-medium', name), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope}`));
       row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: name, button,
-        review: async value => { try { present(await client.propose({ type: 'select', root: { ...root, configuration: value } })); } catch (error) { showStatus(error.message); } } }));
+        review: async value => { try { present(await client.propose({ type: 'select', root: { ...root, configuration: value } })); } catch (error) { showStatus(notDone(error, "The configuration wasn't changed")); } } }));
       row.append(button(`Take ${name} out of setup`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
       accepted.append(row);
     }
