@@ -1,22 +1,24 @@
 import { el, collectIds } from "./dom.js";
-import { clientNodes, publishedClients } from "./core-targets.js";
+import { NOT_SUPPORTED_YET, listedTools, setupToolsNotice, toolLabels, toolNames } from "./tool-list.js";
 import { REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 
-const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", clients: "Which AI clients do you use?", review: "Review your local setup" };
-const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", clients: "AI clients", review: "Review" };
+const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", clients: "Your tools", review: "Review your local setup" };
+const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", clients: "Your tools", review: "Review" };
 
-export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
+// onSaved: the person saved setup just now (first run or an edit), after onComplete has applied it.
+export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit = () => {} }) {
   const elements = collectIds(["setup-dialog", "setup-title", "setup-description", "setup-fixed-experience", "setup-progress", "setup-content", "setup-error", "setup-back", "setup-next", "setup-skip", "setup-cancel", "setup-form"]);
   let draft = newSetupSettings();
   let editing = false;
   let editSection = null;
   let location = null;
   let step = 0;
-  let targets = null;
+  // Core's tool list, the one the header's Your tools shows (src/app/tool-list.js): null until it is read.
+  let tools = null;
   let labels = {};
-  let targetReason = "The published client list is loading.";
+  let toolsNotice = "Loading your tools… Tools you already chose stay chosen; you can continue and choose them later from Settings.";
   let savedProblem = null;
   let loading = true;
   let saving = false;
@@ -93,25 +95,29 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     elements.setupContent.append(group);
   }
   function renderClients() {
-    elements.setupDescription.textContent = "Select the AI coding clients you use. The list comes from the installed Core package's public nativeClientIds; its order is not a ranking. Selecting one does not install it or verify a connection.";
-    if (targets === null) {
-      elements.setupContent.append(el("p", "setup-notice", `${targetReason} Existing selections stay saved. You can continue without adding clients.`));
+    elements.setupDescription.textContent = "Choose every AI tool you use; most people use several. Choosing one doesn't install it or check that it's connected. A tool marked Not supported yet stays chosen; the Workbench can't check or install content for it yet.";
+    if (!tools?.length) {
+      elements.setupContent.append(el("p", "setup-notice", toolsNotice));
       return;
     }
     const group = el("fieldset", "setup-clients");
-    group.append(el("legend", "sr-only", "Supported AI clients"));
-    for (const target of targets) {
+    group.append(el("legend", "sr-only", "Your tools"));
+    for (const tool of tools) {
       const label = el("label", "setup-choice");
+      label.dataset.tool = tool.id;
       const box = el("input");
       box.type = "checkbox";
-      box.checked = draft.clients.includes(target);
-      box.addEventListener("change", () => { draft.clients = box.checked ? [...draft.clients, target] : draft.clients.filter((item) => item !== target); });
-      label.append(box, ...clientNodes(labels, target));
+      box.checked = draft.clients.includes(tool.id);
+      box.addEventListener("change", () => { draft.clients = box.checked ? [...draft.clients.filter((item) => item !== tool.id), tool.id] : draft.clients.filter((item) => item !== tool.id); });
+      const words = el("span", "space-y-1");
+      words.append(el("span", "block", tool.label ?? tool.id));
+      if (!tool.observed) words.append(el("span", "block text-on-surface-variant text-[11px]", NOT_SUPPORTED_YET));
+      label.append(box, words);
       group.append(label);
     }
-    elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "Your explicit choices are saved in this workspace's local setup. You can change them later from Settings (Edit AI tools), or use Mode to change your experience. The header's Your tool is separate: it picks the one tool you work in."));
-    const unlisted = draft.clients.filter((client) => !targets.includes(client));
-    if (unlisted.length) elements.setupContent.append(el("p", "setup-notice mt-4", `Saved clients no longer listed by this Core stay selected: ${unlisted.join(", ")}.`));
+    elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "Your choices are saved in this workspace's local setup, and every one is chosen in the header's Your tools. You can change them later from Settings (Edit your tools)."));
+    const unlisted = draft.clients.filter((client) => !tools.some((tool) => tool.id === client));
+    if (unlisted.length) elements.setupContent.append(el("p", "setup-notice mt-4", `${toolNames(labels, unlisted)} stay${unlisted.length === 1 ? "s" : ""} chosen.`));
   }
   function renderReviewer() {
     const wrapper = el("div", "space-y-1.5 mb-6");
@@ -246,6 +252,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     try {
       const saved = await (editing ? updateSetup(draft) : saveSetup(draft));
       onComplete(saved.settings, saved.location);
+      onSaved(saved.settings);
       elements.setupDialog.close();
       if (editing) { editing = false; onCloseEdit(); }
     } catch (failure) {
@@ -319,11 +326,11 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   return {
     start,
     edit: section => start(true, section),
-    setTargets(coreTargets) {
-      const published = publishedClients(coreTargets);
-      targets = published ? published.ids : null;
-      labels = published ? published.labels : {};
-      targetReason = coreTargets?.reason ?? "The installed Core does not publish supported AI clients.";
+    /** Core's tool list, as the header read it (src/app/tool-list.js). */
+    setTools(list) {
+      tools = listedTools(list);
+      labels = toolLabels(list);
+      toolsNotice = setupToolsNotice(list) ?? toolsNotice;
       if (elements.setupDialog.open && !loading && current() === "clients") render();
     },
   };

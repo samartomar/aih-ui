@@ -10,7 +10,7 @@ import { stateWords } from '../../src/app/installed-panel.js';
 import { confirmRemoval, previewRemoval, removalMemberWords } from '../../src/app/installed-removal.js';
 import { confirmUpdate, previewUpdate } from '../../src/app/installed-update.js';
 import { replacedNames } from '../../src/catalog/item-name.js';
-import { refusalWords, unobservedWords } from '../../src/app/your-tool.js';
+import { createYourTool, refusalWords } from '../../src/app/your-tool.js';
 import { organizationPolicyNotice, readFailureWords, sourceAnswerWords } from '../../src/catalog/organization-policy.js';
 import { coreSentence } from '../../src/app/core-words.js';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
@@ -211,10 +211,6 @@ const ASK_HOST = 'Ask whoever runs this Workbench to check the policy file.';
 const ROW_50 = "Organization policy not read. No organization policy is connected, so Enterprise policies can't be admitted. Add your organization's policy repository in setup, or ask whoever runs this Workbench to connect a local policy file.";
 const NOT_GITHUB = "Organization policy not read. The Workbench reads policy repositories on GitHub only, and gitlab.com/acme/policies isn't one. Save a GitHub repository in setup, or ask whoever runs this Workbench to connect a local policy file.";
 
-test("row 42: the tools Core hasn't observed, without Core's code", () => {
-  assert.equal(unobservedWords(['Cursor']), "Cursor: Core hasn't observed it working, so no fit is shown and nothing is installed for it.");
-  assert.equal(unobservedWords(['Cursor', 'Kiro IDE']), "Cursor, Kiro IDE: Core hasn't observed them working, so no fit is shown and nothing is installed for them.");
-});
 
 test("row 43: a tool Core refuses says Core's reason sentence, never its code or a function name", () => {
   assert.equal(refusalWords({ refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason: 'tool-not-observed' } }), "Core hasn't observed it working, so no fit is shown for it.");
@@ -346,7 +342,7 @@ test('no Your tools or organisation policy text on the page says a Core code', (
   assert.match('Cursor (tool-not-observed)', CORE_CODE); assert.match('couldn’t be read: network-unavailable.', CORE_CODE); assert.match("Core's listTools() does not offer it", CORE_CODE);
   assert.doesNotMatch('Organization policy read: gosam-baseline from samartomar/test', CORE_CODE, 'a policy id followed by more words is a name');
   const codes = ['tool-not-observed', 'unknown-tool', 'authentication-required-or-denied', 'source-missing-or-inaccessible', 'network-unavailable', 'policy-invalid'];
-  const said = [unobservedWords(['Cursor']), unobservedWords(['Cursor', 'Kiro IDE']), refusalWords({}), refusalWords({ refusal: { code: 'INPUT_INVALID' } })];
+  const said = [refusalWords({}), refusalWords({ refusal: { code: 'INPUT_INVALID' } })];
   for (const reason of [...codes, undefined]) said.push(refusalWords({ refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason } }));
   for (const settings of [enterprise(''), enterprise('https://github.com/samartomar/test'), enterprise('gitlab.com/acme/policies'), null]) {
     for (const answer of [{ status: 'not-configured' }, { status: 'not-configured', request: { repository: 'samartomar/test', path: 'p.json', branch: 'main' } }, { status: 'ok', source: github, policyId: 'gosam-baseline' },
@@ -363,5 +359,39 @@ test('no Your tools or organisation policy text on the page says a Core code', (
     for (const code of codes) assert.ok(!words.includes(code), `"${words}" says Core's ${code}`);
     assert.doesNotMatch(words, /AIH_[A-Z_]+|controls file|[A-Z]+_[A-Z_]+/, `"${words}" names host configuration or a Core code`);
     assert.ok(!words.includes('Core gave no reason.'), `"${words}" says what to do`);
+  }
+});
+
+// Your tools on the page: every note, row tooltip and header tooltip, for observed, not-yet-supported, refused and
+// no-longer-listed tools.
+class ToolNode {
+  constructor() { this.textContent = ''; this.title = ''; this.children = []; this.listeners = {}; this.attributes = {}; this.dataset = {}; this.hidden = false; this.className = ''; }
+  append(...nodes) { this.children.push(...nodes); } appendChild(node) { this.children.push(node); return node; } replaceChildren(...nodes) { this.children = nodes; }
+  setAttribute(name, value) { this.attributes[name] = value; } getAttribute(name) { return this.attributes[name]; } removeAttribute(name) { delete this.attributes[name]; }
+  addEventListener(name, action) { this.listeners[name] = action; } querySelector() { return null; } querySelectorAll() { return []; } contains() { return false; } focus() {}
+}
+test('no Your tools text on the page says a Core code, function name, registry or host variable', async t => {
+  const tools = [{ id: 'claude', label: 'Claude Code', surface: 'cli', observed: true },
+    { id: 'cursor', label: 'Cursor', surface: 'ide', observed: false, refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason: 'tool-not-observed' } },
+    { id: 'kiro-ide', label: 'Kiro IDE', surface: 'ide', observed: false, refusal: { code: 'INPUT_INVALID', reason: 'unknown-tool' } },
+    { id: 'zed', label: 'Zed', surface: 'ide', observed: false }];
+  const store = new Map([['wb-your-tools-changes', JSON.stringify({ unticked: [], added: ['cursor', 'kiro-ide', 'zed', 'gone-tool'] })]]);
+  const previous = { document: globalThis.document, localStorage: globalThis.localStorage, fetch: globalThis.fetch, addEventListener: globalThis.addEventListener };
+  t.after(() => Object.assign(globalThis, previous));
+  globalThis.document = { createElement: () => new ToolNode(), createElementNS: () => new ToolNode(), addEventListener() {}, activeElement: null };
+  globalThis.localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)), removeItem: key => store.delete(key) };
+  globalThis.addEventListener = () => {};
+  globalThis.fetch = async path => ({ ok: true, json: async () => path === '/api/tools' ? { ok: true, state: 'published', tools } : { ok: true, state: 'inspected', tools: [], observations: [] } });
+  const elements = Object.fromEntries(['yourToolTrigger', 'yourToolIcon', 'yourToolName', 'yourToolPop', 'yourToolList', 'yourToolNote'].map(name => [name, new ToolNode()]));
+  const control = createYourTool({ elements });
+  await control.start(); control.setSetupClients(['claude']);
+  const said = [], collect = node => { said.push(node.textContent, node.title, node.attributes['aria-label']); node.children.forEach(collect); };
+  for (const node of Object.values(elements)) collect(node);
+  const words = said.filter(Boolean);
+  assert.ok(words.some(text => text.includes('Not supported yet')), 'D1 says Not supported yet');
+  assert.ok(words.some(text => text.includes('Core refuses it, so no fit is shown for it.')), 'a refusal other than not supported yet is said in plain words');
+  for (const text of words) {
+    assert.doesNotMatch(text, CORE_CODE, text);
+    assert.doesNotMatch(text, /tool-not-observed|unknown-tool|gone-tool|AIH_[A-Z_]+|[A-Z]+_[A-Z_]+|registry|listTools/i, text);
   }
 });

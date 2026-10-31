@@ -60,7 +60,8 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
     // What the counts mean, as a small collapsed note below the frameworks. Its summary names every chosen tool.
     if (tools.length) {
       const note = el('details', 'framework-source-note'); note.dataset.compatibilityNote = ''; note.dataset.tools = tools.map(value => value.id).join(' ');
-      const summary = el('summary', '', `Compatibility observations for ${observedTools.length ? names(observedTools) : 'none of your tools'}${unobserved.length ? ` · Not observed by Core: ${names(unobserved)}` : ''}`);
+      // Every chosen tool by Core's label, then plainly which have none yet: Core doesn't support those yet.
+      const summary = el('summary', '', `Compatibility observations for ${names(tools)}.${unobserved.length ? ` None yet for ${names(unobserved)}: not supported yet.` : ''}`);
       attachTooltip(summary, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.');
       note.append(summary, el('p', '', `Workbench host: ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}`),
         el('p', '', 'Published compatibility evidence, not installed-item counts. Zero observations means not yet confirmed, not unsupported.'));

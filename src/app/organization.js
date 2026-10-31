@@ -3,7 +3,7 @@ import { setupSummary } from "./setup-summary.js";
 import { experienceLabel } from "./setup-model.js";
 import { createModePicker } from "./workbench-mode.js";
 import { el } from "./dom.js";
-import { publishedClients } from "./core-targets.js";
+import { toolLabels } from "./tool-list.js";
 
 export function createOrganization({ elements, onEdit, onModeComplete }) {
   const modePicker = createModePicker({ onComplete: onModeComplete });
@@ -44,7 +44,7 @@ export function createOrganization({ elements, onEdit, onModeComplete }) {
     if (!saved) return;
     const summary = setupSummary(saved, location, labels);
     const actions = el("div", "flex flex-wrap gap-2");
-    for (const [section, caption] of [["organization", "Edit organization"], ["clients", "Edit AI tools"], ["review", "Edit reviewer"]]) {
+    for (const [section, caption] of [["organization", "Edit organization"], ["clients", "Edit your tools"], ["review", "Edit reviewer"]]) {
       if (section === "organization" && saved.role !== "admin") continue;
       const button = el("button", "wb-btn", caption);
       button.type = "button";
@@ -76,7 +76,8 @@ export function createOrganization({ elements, onEdit, onModeComplete }) {
       elements.orgModalTitle.textContent = experienceLabel(settings) + " · local setup";
       render();
     },
-    setTargets(coreTargets) { labels = publishedClients(coreTargets)?.labels ?? {}; render(); },
+    /** Core's tool list (src/app/tool-list.js), for the names of setup's tools. */
+    setTools(list) { labels = toolLabels(list); render(); },
     current: () => saved,
   };
 }

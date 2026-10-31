@@ -1,4 +1,5 @@
 import { publishedClients, clientText } from './core-targets.js';
+import { toolLabels } from './tool-list.js';
 import { fillBoundedOptions } from './bounded-options.js';
 import { recoverOrganizationSession, saveOrganizationSession } from './draft-session.js';
 
@@ -163,8 +164,9 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const targetScope = select('Target scope', 'org-target-scope', scopes, 'project'), targetClient = select('Target client', 'org-target-client', [['', 'Not declared']]), repository = input('Target repository', 'org-target-repository');
   const clientStatus = identify(el('p', 'text-on-surface-variant'), 'org-target-client-status'); targetClient.setAttribute('aria-describedby', clientStatus.id);
   // Core's published AI clients (null before the summary arrives): the field offers only these, and Core's preview stays the authority on a client.
-  let coreTargets = null, clients = null, entryClientFields = [];
-  const listed = () => clients?.ids ?? [], labels = () => clients?.labels ?? {};
+  // A client that is also in Core's tool list (src/app/tool-list.js) is named by its label there, as the header and setup name it.
+  let coreTargets = null, clients = null, entryClientFields = [], toolListLabels = {};
+  const listed = () => clients?.ids ?? [], labels = () => ({ ...(clients?.labels ?? {}), ...toolListLabels });
   const targetRow = line(); targetRow.append(labeled('Scope', targetScope), labeled('Client', targetClient), labeled('Repository', repository), action('Add target', 'org-target-add', () => {
     if (targetClient.value && !listed().includes(targetClient.value)) throw new Error(`AI client "${targetClient.value}" is not one the installed Core lists. Choose a listed client, or leave it not declared.`);
     return edit({ kind: 'add-target', scope: targetScope.value, ...(targetClient.value ? { client: targetClient.value } : {}), ...(repository.value ? { repository: repository.value } : {}) });
@@ -307,6 +309,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     const byId = id => [...node.querySelectorAll('[id]')].find(control => control.id === id), control = focusedId && byId(focusedId);
     if (focusedId) (control && !control.disabled ? control : byId('org-target-add'))?.focus();
   }
+  function setToolList(list) { toolListLabels = toolLabels(list); renderClients(); renderTargets(); }
   renderClients(); syncPrerequisites();
   let recoveryChecked = false;
   node.addEventListener('toggle', safe(async () => {
@@ -319,5 +322,5 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     if (result.status === 'superseded') return;
     renderDraft(); report(result.status === 'ok' ? 'Organization draft recovered from this browser session. Download it to keep a file.' : failure(result));
   }));
-  return { node, setTargets };
+  return { node, setTargets, setToolList };
 }

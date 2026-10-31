@@ -242,6 +242,16 @@ test('the target client field offers exactly Core\'s published clients with Harn
   assert.match(find('org-target-client-status').textContent, /not mean it is installed, connected or admitted/i);
 });
 
+test('a client in Core\'s tool list is named by the tool list\'s label, the name the header and setup use', async t => {
+  const { view, find } = await mountTargets(t);
+  view.setToolList({ state: 'published', tools: [{ id: 'codex', label: 'Codex CLI' }, { id: 'kiro-ide', label: 'Kiro IDE' }] });
+  view.setTargets(published);
+  assert.deepEqual(clientOptions(find), [['', 'Not declared'], ['claude', 'Claude Code (claude)'], ['codex', 'Codex CLI (codex)'], ['zed', 'zed']],
+    'the offered clients stay Core\'s policy clients; only the name follows the tool list');
+  view.setToolList({ state: 'failed', reason: 'x' });
+  assert.deepEqual(clientOptions(find)[2], ['codex', 'Codex (codex)']);
+});
+
 test('adding a target sends a listed or undeclared client and refuses one outside the list without a request', async t => {
   const { view, find, calls, statuses } = await mountTargets(t);
   view.setTargets(published);

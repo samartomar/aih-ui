@@ -40,7 +40,7 @@ export async function runSetupAssistanceBrowser({ origin, output, playwrightModu
     assert.doesNotMatch(await page.locator('#setup-progress').innerText(), /Assistance/, 'setup progress has no assistance step');
     await page.locator('#setup-next').click();
     await keep('after-mode');
-    assert.equal(screens['after-mode'].title, 'Which AI clients do you use?', 'Continue from the mode goes straight to the AI clients');
+    assert.equal(screens['after-mode'].title, 'Your tools', 'Continue from the mode goes straight to Your tools');
     assert.equal(await page.locator('#setup-content input[type="checkbox"][value]').evaluateAll(boxes => boxes.filter(box => /review|memory|serena|headroom|workspace|context/.test(box.value)).length), 0);
     await page.locator('#setup-next').click();
     await keep('review');

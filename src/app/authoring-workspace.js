@@ -684,6 +684,8 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   function setTargets(coreTargets) {
     improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets);
   }
+  // Core's tool list: the names the header and setup give a tool.
+  function setToolList(list) { organizationAuthor.setToolList(list); }
   // Project basics reaches the same workspace view in its Advanced home: Your setup opens with Advanced and the
   // workspace open, and focus moves to it.
   function openWorkspace() {
@@ -692,5 +694,5 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const summary = disclosure.querySelector(':scope > summary');
     summary.scrollIntoView({ block: 'start' }); summary.focus({ preventScroll: true });
   }
-  return { present, add, remove, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  return { present, add, remove, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets, setToolList };
 }
