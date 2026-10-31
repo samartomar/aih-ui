@@ -239,9 +239,9 @@ example, with the three tarballs beside the manifest:
   "candidate": "Core dev.55, Catalog 0.1.0 main, Scan 0.5.0",
   "packages": {
     "core": {
-      "tarball": "aihq-core-1.0.0-dev.55-main-2aedd1b-sha256-b37cdcf3e42d7bf2dbf0fc6eb38aa2215321e8ff8cb045fb479e4fc969f359ca.tgz",
-      "sha256": "b37cdcf3e42d7bf2dbf0fc6eb38aa2215321e8ff8cb045fb479e4fc969f359ca",
-      "commit": "2aedd1b"
+      "tarball": "aihq-core-1.0.0-dev.55-main-ff427f7-sha256-b4ded2baa213a9f480dd050a526714b88dcecddfdcbf28ef58f7d3448883b7e9.tgz",
+      "sha256": "b4ded2baa213a9f480dd050a526714b88dcecddfdcbf28ef58f7d3448883b7e9",
+      "commit": "ff427f7"
     },
     "catalog": {
       "tarball": "aihq-catalog-0.1.0-main-3b273faa-sha256-d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52.tgz",

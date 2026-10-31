@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-core
-          ref: 2aedd1bdf97aa5c5aba9d432e65b90eaa60ae820
+          ref: ff427f751866fe54c0b3b7e5b34423f770ed65d3
           path: .ci/core
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
