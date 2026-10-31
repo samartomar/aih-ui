@@ -30,7 +30,7 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const server = createStaticServer(runDir, async (request, response, pathname) => {
     try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await report.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
     catch (error) {
-      response.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `Authoring host unavailable: ${error.message}` })); return true;
+      response.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `Authoring host unavailable: ${error.message}${error.cause ? ` (${error.cause.code ?? error.cause.message})` : ""}` })); return true;
     }
   });
   server.on('close', () => { authoring.close(); readiness.close(); batch.close(); });

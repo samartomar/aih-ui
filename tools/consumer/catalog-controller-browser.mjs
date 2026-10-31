@@ -77,7 +77,7 @@ async function openController(options = {}) {
         if (operation === 'browse-content') return new Promise(resolve => pending.push({ body, resolve }));
         return Promise.resolve({ status: 'ok' });
       },
-      propose(edit) { return new Promise(resolve => proposals.push({ edit, resolve })); },
+      propose(edit) { return new Promise((resolve, reject) => proposals.push({ edit, resolve, reject })); },
       recordApproval(operation) { approvalRequests.push(operation); return Promise.resolve(options.approvalResult ?? { status: 'ok' }); },
     };
     const catalog = createCatalog({ authoring, onSummary() {}, onSelectEntry() {} });
@@ -131,6 +131,13 @@ async function setAdd() {
   await page.evaluate(() => window.ui165Controller.proposals[1].resolve({ status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: 'Exact set refusal.' }] }));
   await guidance.filter({ hasText: 'Exact set refusal.' }).waitFor();
   assert.equal(await add.getAttribute('aria-busy'), null);
+  // A host that does not answer is said in words, never a silent return to the idle guidance.
+  await add.click();
+  await guidance.filter({ hasText: 'Adding chosen sets…' }).waitFor();
+  await page.evaluate(() => window.ui165Controller.proposals[2].reject(new Error('Authoring host unavailable: fetch failed')));
+  await guidance.filter({ hasText: 'The chosen sets were not added: Authoring host unavailable: fetch failed. Your choices are unchanged; try Add again.' }).waitFor();
+  assert.equal(await add.getAttribute('aria-busy'), null);
+  assert.equal(await add.getAttribute('aria-disabled'), null);
   await page.close();
 }
 
