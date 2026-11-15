@@ -7,18 +7,17 @@
 5. Keep no plans, handoffs or status documents in this repo. A decision that changes what the repo owns goes in `README.md`.
 6. Never publish to npm or force-push without the owner's explicit approval.
 
-## Agent skills
+For maintainer assignments, keep the coordinating session in its supplied
+workspace and target this Git root explicitly for commands and edits. Load these
+product rules from that session. Coordination across repositories does not relax
+the public-interface boundary above. Public contributors can use this repository
+independently; private startup routing stays outside public files.
 
-Use the installed Matt Pocock engineering skills and aih-extensions within this repository's existing rules. Keep the skills in their managed user installation.
+## Workflow references
 
-### Issue tracker
+Use the managed Matt Pocock skills and Extensions within this repository's rules.
+Keep upstream skills in their managed installation, unchanged by repository cleanup.
 
-GitHub Issues on `samartomar/aih-ui`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Use the five default triage roles. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-One product vocabulary with the existing decision authority. See `docs/agents/domain.md`.
+- [Issue routing](docs/agents/issue-tracker.md): owning delivery issue and intake.
+- [Triage](docs/agents/triage-labels.md): existing label roles and mappings.
+- [Domain documentation](docs/agents/domain.md): vocabulary and decision homes.
