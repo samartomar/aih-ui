@@ -90,6 +90,7 @@ try {
     await draft('vibe', 'Updated instructions.', true);
     prepared = await post('prepare', { mode: 'vibe' });
     assert.ok(prepared.prepared, JSON.stringify(prepared.outcome));
+    assert.ok(prepared.prepared.result.review.origin?.recipe?.sha256, JSON.stringify(prepared.prepared.result.review.originNote));
     checks.push(`whole-plugin Core result: ${prepared.prepared.result.status}; apply available: ${prepared.prepared.applyAllowed}`);
     await writeFile(join(workspace, 'superpowers-prepare.json'), JSON.stringify(prepared, null, 2));
     assert.equal(prepared.prepared.applyAllowed, true, JSON.stringify(prepared.prepared.result));
@@ -147,8 +148,8 @@ try {
   }
   const inspection = await post('inspect', { mode: 'vibe' }); assert.equal(inspection.inspection.schema, 'urn:aihq:core:inspection:0.1.0');
   assert.equal(inspection.reportDigest, null, 'Inspection alone must not advertise a downloadable capture');
-  const repair = await post('repair', { mode: 'vibe' }); assert.ok(repair.repair); assert.ok(repair.repairApply.includes('Not applied'));
-  checks.push(`offline inspection and real node-npm-ca preparation (${repair.repair.status}), no repair Apply`);
+  const repair = await post('repair', { mode: 'vibe' }); if (inspection.repairInfo.suggestedTargets.length) { assert.ok(repair.repair); assert.match(repair.repairApply,/Not applied/); } else { assert.equal(repair.repair,null); assert.match(repair.repairApply,/not suggested/); }
+  checks.push(`offline inspection and real node-npm-ca preparation (${repair.repair?.status || 'not indicated'}), no repair Apply`);
   const report = await post('report', { mode: 'vibe' });
   assert.equal(report.history.at(-1).support.status, 'rendered', JSON.stringify(report.history.at(-1).support));
   assert.ok(report.history.at(-1).support.markdown.length > 30);

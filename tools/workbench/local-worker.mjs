@@ -5,7 +5,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { loadPublic } from './local-packages.mjs';
 import { createReportRenderer } from '../../src/report/render.js';
 import { createExtensionsInstaller } from './local-extensions.mjs';
+import { cachedCatalogBytes, verifiedCatalogFiles } from './catalog-install.mjs';
 import { explainFileCheck } from './file-check-explanation.mjs';
+import { buildPolicyDraft, policyChanges, policyPosture } from './policy-draft.mjs';
+import { installedGroups } from './installed-groups.mjs';
+import { selectedClientTarget } from './client-target.mjs';
 import { developerConsole, enableReportKeyboard } from './developer-console.mjs';
 
 const [consumer, root, mode] = process.argv.slice(2);
@@ -13,6 +17,7 @@ const project = join(root, 'project'), policyPath = join(root, 'organization.jso
 await mkdir(project, { recursive: true });
 const { api: core } = await loadPublic(consumer, '@aihq/core', '.');
 const { api: harnessRuntime } = await loadPublic(consumer, '@aihq/core', './harness/runtime');
+const { api: harnessPublic } = await loadPublic(consumer, '@aihq/core', './harness');
 const { api: contracts } = await loadPublic(consumer, '@aihq/core', './contracts');
 function readResult(result, field) {
   if (result.status !== 'ok') throw Error('Core refused the diagnostic snapshot: ' + result.status);
@@ -66,7 +71,7 @@ if (profileRead.status !== 'ok') throw Error('Catalog profile rejected');
 const profile = profileRead.profile;
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const clean = value => JSON.parse(JSON.stringify(value, (key, val) => ['handle', 'prepared'].includes(key) ? undefined : val));
-const controls = request => ({ logging: 'off', ...(request?.schema === 'urn:aihq:core:plan-request:0.1.0' ? { catalog: { version, renderStep: reader.renderStep, planRecipe: reader.planRecipe } } : {}), ...(mode === 'enterprise' ? { organization: { provider: 'local', path: policyPath } } : {}) });
+const controls = request => ({ logging: 'off', ...(request?.schema === 'urn:aihq:core:plan-request:0.1.0' ? { catalog: { version, readRecipe: reader.readRecipe, renderStep: reader.renderStep, planRecipe: reader.planRecipe } } : {}), ...(mode === 'enterprise' ? { organization: { provider: 'local', path: policyPath } } : {}) });
 const change = {
   schema: 'urn:aihq:core:change:0.1.0', id: 'example-project-instructions',
   description: 'Independently authored project instructions, editable through one declared input.',
@@ -76,6 +81,7 @@ const change = {
 const identity = await contracts.deriveChangeIdentity({ change });
 if (identity.status !== 'ok') throw Error(JSON.stringify(identity));
 const target = { project, client: { id: 'claude-code', surface: 'cli' }, repository: 'https://example.invalid/docs-site' };
+let catalogSelections = {}, pendingCatalogApply = null;
 let organization = null, generation = 0, review = null, lastRequest = null, requests = {};
 let draft = { choices: { instructions: false, superpowers: false, extensions: false }, text: 'Use the project conventions. Review changes before committing.' };
 let history = [], inspection = null, repair = null, sourceResult = null, latestReport = null;
@@ -88,7 +94,11 @@ try {
   latestReport = {status:'ok', snapshot};
   if (saved.inspection) inspection = saved.inspection;
   if (saved.repair) repair = saved.repair;
-  if (Array.isArray(saved.history)) history = saved.history;
+  if (Array.isArray(saved.history)) history = saved.history.map(row => {
+    if (row.guidance?.status!=='invalid'||!['prepare','run'].includes(row.kind)) return row;
+    const input = {kind:row.kind,result:row.result}, options = {platform:process.platform};
+    return {...row,guidance:contracts.getGuidance(input,options),support:contracts.renderSupportMarkdown(input,options)};
+  });
 } catch (error) { if (error.code !== 'ENOENT') throw error; }
 async function readSnapshot(digest) {
   const snapshot = JSON.parse(await readFile(join(reportsDirectory, digest + '.json'), 'utf8'));
@@ -115,7 +125,21 @@ if (mode === 'enterprise') {
   }
 }
 try { organization = JSON.parse(await readFile(policyPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-try { const saved = JSON.parse(await readFile(join(root, 'intent.json'), 'utf8')); draft = saved.draft; lastRequest = saved.lastRequest; requests = saved.requests || (lastRequest ? { [lastRequest.schema.includes('change-request') ? 'instructions' : 'superpowers']: lastRequest } : {}); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+try { const saved = JSON.parse(await readFile(join(root, 'intent.json'), 'utf8')); pendingCatalogApply=saved.pendingCatalogApply||null; catalogSelections=saved.catalogSelections||{}; draft = saved.draft; lastRequest = saved.lastRequest; requests = saved.requests || (lastRequest ? { [lastRequest.schema.includes('change-request') ? 'instructions' : 'superpowers']: lastRequest } : {}); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+// A process can stop after Core records a receipt and before the browser receives its run.
+if (pendingCatalogApply) {
+  const {selection, request} = pendingCatalogApply;
+  if ((await inventory()).entries.some(entry => selectionOwnsEntry(selection,entry))) {
+    catalogSelections[selection.key]=selection;
+    requests[selection.key]=request;
+  }
+  pendingCatalogApply=null;
+  await persist();
+}
+function selectionOwnsEntry(selection,entry) {
+  const matchesItem=selection.items.some(id => entry.managementId===id || entry.items?.includes(id));
+  return matchesItem && (!entry.claims?.length || entry.claims.some(claim => claim.cli===null || claim.cli===selection.client));
+}
 draft.choices = { instructions: false, superpowers: false, extensions: false, ...draft.choices };
 const requestUnit = request => request.schema.includes('change-request') ? 'instructions' : request.contents?.some(content => content.framework.id === 'extensions') ? 'extensions' : 'superpowers';
 const instructionsRequest = () => ({ schema: 'urn:aihq:core:change-request:0.1.0', mode, scope: 'project', target, changes: [{ managementId: 'project-instructions', change, inputs: { text: draft.text }, requires: [] }] });
@@ -165,44 +189,68 @@ async function currentAdmission(saved, installed) {
 async function installedPolicyChecks(installed) {
   if (mode !== 'enterprise' || !organization) return [];
   const units = new Map();
-  for (const entry of installed.entries || []) {
-    const pluginFramework = ['extensions', 'superpowers'].find(framework => entry.framework === framework || entry.items?.some(id => id.startsWith(framework + '.')));
-    const isPlugin = !!pluginFramework;
-    const unit = isPlugin ? pluginFramework : entry.managementId === 'project-instructions' ? 'instructions' : entry.managementId;
-    if (!units.has(unit)) {
-      const label = isPlugin ? pluginFramework === 'extensions' ? 'AIH Extensions' : 'Superpowers' : unit === 'instructions' ? 'Project instructions' : entry.managementId;
-      units.set(unit, { unit, label, removalId: null });
+  for (const group of installedGroups(installed,requests,catalogSelections)) {
+    const tracked = group.wholePlugin ? [] : Object.values(catalogSelections).filter(selection => group.entries.some(entry => selectionOwnsEntry(selection,entry)));
+    if (tracked.length) {
+      for (const selection of tracked) if (!units.has(selection.key)) units.set(selection.key,{unit:selection.key,label:retainedCatalogItems(selection,installed).join(', ')+' · '+selection.client,removalId:group.id});
+    } else {
+      const unit = group.wholePlugin ? group.framework : group.id==='project-instructions'?'instructions':group.id;
+      if (!units.has(unit)) units.set(unit,{unit,label:unit==='instructions'?'Project instructions':group.label,removalId:group.id});
     }
-    if (!isPlugin || entry.localPlugin || entry.plugins?.length) units.get(unit).removalId = entry.managementId;
   }
   return Promise.all([...units.values()].map(async row => {
-    const result = await currentAdmission(Object.hasOwn(requests, row.unit) ? requests[row.unit] : null, installed);
+    const request = catalogSelections[row.unit] ? currentCatalogPolicyRequest(row.unit,installed) : requests[row.unit];
+    const result = await currentAdmission(request, installed);
     const status = result?.status !== 'ok' ? 'unknown' : result.value.admitted ? 'allowed' : 'denied';
     return { ...row, status };
   }));
 }
+function retainedCatalogItems(selection,installed) {
+  const managed = new Set(installed.entries.filter(entry => selectionOwnsEntry(selection,entry)).flatMap(entry => [entry.managementId,...(entry.items||[])]));
+  return selection.items.filter(id => managed.has(id));
+}
+function currentCatalogPolicyRequest(key, installed) {
+  const saved = requests[key], selection = catalogSelections[key];
+  if (!saved || !selection) return saved;
+  const remaining = retainedCatalogItems(selection,installed);
+  if (remaining.length === selection.items.length) return saved;
+  if (!remaining.length) return null;
+  const plan = reader.planInstall(remaining,saved.contents,saved.profiles,{scope:'project',data:saved.plan.data});
+  if (plan.status !== 'ok') return null;
+  const needed = new Set(plan.plan.filter(step => step.from).map(step => step.from.sha256));
+  return {...saved,plan,files:saved.files.filter(ref => needed.has(ref.sha256))};
+}
 function invalidate() { review = null; generation++; }
-async function persist() { await writeFile(join(root, 'intent.json'), JSON.stringify({ draft, lastRequest, requests }, (key, value) => key === 'bytes' ? undefined : value, 2)); }
+async function persist() {
+  const path=join(root,'intent.json');
+  await writeFile(path+'.tmp',JSON.stringify({draft,lastRequest,requests,catalogSelections,pendingCatalogApply},(key,value) => key==='bytes'?undefined:value,2));
+  await rename(path+'.tmp',path);
+}
 function remember(kind, result, extra = {}) {
   const input = { kind, result: clean(result), ...extra };
   const guidance = contracts.getGuidance(input, { platform: process.platform });
   const support = contracts.renderSupportMarkdown(input, { platform: process.platform });
-  history.push({ sequence: history.length + 1, at: new Date().toISOString(), kind, result: clean(result), guidance, support });
+  history.push({ sequence: (history.at(-1)?.sequence || 0) + 1, at: new Date().toISOString(), kind, result: clean(result), guidance, support });
   if (history.length > 20) history.shift();
 }
 async function diagnosticReport() {
   const diagnostic = await harness.diagnose({ requestId: randomUUID(), targets: ['node', 'git'], network: 'off', project });
-  return contracts.createReport({ diagnostic, producer: { name: '@aihq/core', version: '0.0.0-dev.1', revision: snapshot.packages.find(item => item.name === '@aihq/core')?.revision || null }, observedAt: new Date().toISOString(), acquisition: 'newly-acquired', redaction: { homePaths: [root] } });
+  return contracts.createReport({ diagnostic, producer: { name: '@aihq/core', version: '0.0.0-dev.1', revision: snapshot.packages.find(item => item.name === '@aihq/core')?.commit || null }, observedAt: new Date().toISOString(), acquisition: 'newly-acquired', redaction: { homePaths: [root] } });
+}
+function suggestedRepairTargets() {
+  if (!inspection) return [];
+  const guidance = contracts.getGuidance({kind:'inspect',result:inspection},{platform:process.platform});
+  return [...new Set((guidance.items||[]).flatMap(item => item.repairs||[]).filter(repair => repair.id==='node-npm-ca').flatMap(repair => repair.targets))];
 }
 async function state() {
   const installed = await inventory();
-  return { mode, connectedFramework: { unit:'extensions', id:'extensions', name:'AIH Extensions', version:'0.6.0', plugin:'aih-extensions' }, extensionsDerivation:extensionsInstaller.derivation(), project, home: process.env.USERPROFILE || process.env.HOME, organization, policyDigest: policyDigest(), reviews, generation, draft, inventory: installed, installedPolicyChecks: await installedPolicyChecks(installed), prepared: review ? { id: review.id, context: review.context, result: clean(review.result), operation: review.operation, applyAllowed: review.applyAllowed, nativePlugin: review.nativePlugin } : null, history, inspection, repair, report: latestReport, reportDigest: latestReport?.status === 'ok' ? hash(latestReport.snapshot) : null, source: sourceResult ? { status: sourceResult.status, reason: sourceResult.reason, commit: sourceResult.source?.commit } : null };
+  return { mode, installedGroups:installedGroups(installed,requests,catalogSelections), repairInfo:{platform:process.platform,suggestedTargets:suggestedRepairTargets(),definition:harnessPublic.repairIndex.find(repair => repair.id === 'node-npm-ca')}, connectedFramework: { unit:'extensions', id:'extensions', name:'AIH Extensions', version:'0.6.0', plugin:'aih-extensions' }, extensionsDerivation:extensionsInstaller.derivation(), project, home: process.env.USERPROFILE || process.env.HOME, organization, policyDigest: policyDigest(), reviews, generation, draft, inventory: installed, installedPolicyChecks: await installedPolicyChecks(installed), prepared: review ? { id: review.id, context: review.context, result: clean(review.result), operation: review.operation, catalogSelection: review.catalogSelection, applyAllowed: review.applyAllowed, nativePlugin: review.nativePlugin } : null, history, inspection, repair, report: latestReport, reportDigest: latestReport?.status === 'ok' ? hash(latestReport.snapshot) : null, source: sourceResult ? { status: sourceResult.status, reason: sourceResult.reason, commit: sourceResult.source?.commit } : null };
 }
-async function storePrepared(result, operation, request, allowNative = false) {
+async function storePrepared(result, operation, request, allowNative = false, catalogSelection = null) {
   const context = hash({ draft, organization, generation });
   // Only the connected native Extensions route may approve its reviewed client commands.
   const program = result.review?.steps?.some(step => ['run-program', 'opaque-process'].includes(step.effect) || step.commands?.length);
-  review = { id: randomUUID(), context, result, operation, request, applyAllowed: !!result.handle && (!program || allowNative) };
+  review = { id: randomUUID(), context, result, operation, request, catalogSelection, applyAllowed: !!result.handle && (!program || allowNative) };
   const native = request?.plan?.plan?.find(step => step.op === 'plugin' && step.framework === 'extensions');
   if (native && result.review?.steps?.some(step => step.op === 'plugin' && step.plugin === native.plugin && step.commit === native.commit)) {
     const content = request.contents.find(content => content.framework.id === native.framework);
@@ -231,9 +279,9 @@ async function dispatch(action, body) {
     if (mode !== 'enterprise' || !organization || body.digest !== policyDigest() ||
       createHash('sha256').update(await readFile(policyPath)).digest('hex') !== body.digest)
       throw Error('Saved policy changed. Refresh and review the current revision.');
-    const { company, reviewer, team, note, decision, evidence } = body;
+    const { company, reviewer, team, note, decision, evidence, concern } = body;
     const entry = { id:randomUUID(), recordedAt:new Date().toISOString(), company, reviewer, team, decision, note,
-      attribution:'Self-declared local reviewer', policyId:organization.id, policySha256:body.digest, evidence };
+      attribution:'Self-declared local reviewer', policyId:organization.id, policySha256:body.digest, evidence, ...(concern ? {concern} : {}) };
     const filename = entry.recordedAt.replaceAll(':','-') + '-' + entry.id + '.json';
     const temporary = join(journal, filename + '.tmp');
     await writeFile(temporary, JSON.stringify(entry, null, 2), {flag:'wx'});
@@ -243,24 +291,56 @@ async function dispatch(action, body) {
   }
   if (action === 'profile-admission') {
     if (!organization) return { policy: null, policyNote: 'Save an organization policy to check this plan.' };
-    const request = { ...body, schema: 'urn:aihq:core:plan-request:0.1.0', mode, scope: 'project', target };
+    const { client, ...parts } = body;
+    const selected = selectedClientTarget(harnessPublic,client || 'claude-code');
+    if (!selected) return {policy:null,policyNote:'Core does not recognize this client.'};
+    const request = { ...parts, schema: 'urn:aihq:core:plan-request:0.1.0', mode, scope: 'project', target:{...target,client:selected} };
     const policy = await contracts.previewAdmission({ organization, request, installed: await inventory() });
     return { policy, policyNote: 'Saved policy ' + organization.id + ' · admission applies to the planned Catalog steps.' };
   }
   if (action === 'state') return state();
   if (action === 'draft') { invalidate(); draft = { ...body, choices: { ...draft.choices, ...body.choices } }; await persist(); return state(); }
   if (action === 'policy' || action === 'policy-preview') {
-    const policy = { schema: 'urn:aihq:core:organization:0.1.0', id: body.id, entries: [{ id: 'superpowers-framework', obligation: body.obligation, scopes: ['project'], clients: ['claude-code'], content: { framework: 'superpowers' } }, { id: 'project-instructions', obligation: body.allowCustom ? 'permitted' : 'prohibited', scopes: ['project'], clients: ['claude-code'], change: { identity: identity.changeIdentity }, inputs: { text: { allowDeclared: true } }, lifecycle: { replace: true, adopt: false, remove: true } }], sources: { published: [{ repository: snapshot.catalog.repository, commit: snapshot.catalog.commit }] } };
-    for (const [framework, obligation] of Object.entries(body.frameworkRules || {})) {
-      policy.entries.push({id:'catalog-framework-' + framework, obligation, scopes:['project'], clients:['claude-code'], content:{framework}});
-    }
+    const policy = buildPolicyDraft(organization, body, {data:catalogInput.data,frameworks:catalogInput.documents.map(text => JSON.parse(text).framework)}, identity.changeIdentity);
     const validation = contracts.validateOrganizationPolicy(policy);
     if (validation.status !== 'ok') return { validation };
-    if (action === 'policy-preview') return { validation, policy: validation.value };
+    if (action === 'policy-preview') {
+      const installed = await inventory(), impact = [];
+      for (const [unit,saved] of Object.entries(requests)) {
+        const request = catalogSelections[unit] ? currentCatalogPolicyRequest(unit,installed) : saved;
+        if(!request){impact.push({unit,status:'unknown'});continue;}
+        const reference = request.files ? {...request,files:request.files.map(({bytes,...file}) => file)} : request;
+        const result = await contracts.previewAdmission({organization:validation.value,request:reference,installed});
+        impact.push({unit,status:result.status === 'ok' ? result.value.admitted ? 'allowed':'denied':'unknown'});
+      }
+      let selectionImpact = null;
+      if (body.selection) {
+        const selected = harnessPublic.selectTool(body.selection.client);
+        if (body.selectionRequest && selected.status === 'ok') {
+          const request = {...body.selectionRequest,schema:'urn:aihq:core:plan-request:0.1.0',mode:'enterprise',scope:'project',target:{...target,client:{id:selected.tool.id,surface:selected.tool.surface}}};
+          selectionImpact = {items:body.selection.items,client:body.selection.client,before:organization?await contracts.previewAdmission({organization,request,installed}):null,after:await contracts.previewAdmission({organization:validation.value,request,installed})};
+        } else selectionImpact = {items:body.selection.items,client:body.selection.client,unavailable:'A complete selection plan is needed.'};
+      }
+      return { validation, policy:validation.value, changes:policyChanges(organization,validation.value), impact, selectionImpact, posture:policyPosture(validation.value) };
+    }
     await writeFile(policyPath + '.tmp', JSON.stringify(validation.value, null, 2));
     await rename(policyPath + '.tmp', policyPath);
     organization = validation.value; invalidate();
     return { ...await state(), validation };
+  }
+  if (action === 'catalog-prepare') {
+    invalidate();
+    const { parts, items, client } = body;
+    const clientTarget=selectedClientTarget(harnessPublic,client);
+    if(!clientTarget) throw Error('Core does not recognize this client.');
+    const request={ ...parts, schema:'urn:aihq:core:plan-request:0.1.0', mode, scope:'project', target:{ ...target, client:clientTarget } };
+    const installed=await inventory();
+    const admission=await currentAdmission(request,installed);
+    if (mode==='enterprise' && (!admission?.value?.admitted || admission.status!=='ok')) return {...await state(),outcome:{status:'refused',reason:'The current organization policy does not admit this selection.',admission}};
+    request.files=await verifiedCatalogFiles(parts,{root,catalogNode,sourceCache:sourceResult});
+    const result=await core.prepare(request,controls(request));
+    const key='catalog-'+hash([client,[...items].sort()]).slice(0,24);
+    return storePrepared(result,'install',request,false,{key,items,client});
   }
   if (action === 'prepare') {
     invalidate();
@@ -270,7 +350,7 @@ async function dispatch(action, body) {
     const built = selected === 'extensions' ? await extensionsInstaller.request({ mode, target, profile }) : selected === 'superpowers' ? await superpowersRequest() : { request: instructionsRequest() };
     if (built.result) return { ...await state(), outcome: built.result };
     const request = built.request, current = await inventory();
-    const ids = selected === 'instructions' ? ['project-instructions'] : current.entries?.filter(entry => entry.framework === selected).map(entry => entry.managementId) || [];
+    const ids = selected === 'instructions' ? ['project-instructions'] : installedGroups(current,requests,catalogSelections).find(group => group.wholePlugin && group.framework === selected)?.managementIds || [];
     const installed = current.entries?.some(entry => ids.includes(entry.managementId));
     const result = installed ? await core.prepareUpdate({ target: { project }, scope: 'project', updates: [{ managementIds: ids, request }] }, controls(request)) : await core.prepare(request, controls(request));
     return storePrepared(result, installed ? 'update' : 'install', request, selected === 'extensions');
@@ -279,7 +359,8 @@ async function dispatch(action, body) {
     invalidate();
     const current = await inventory();
     if (!current.entries?.some(entry => entry.managementId === body.managementId)) throw Object.assign(Error('Unknown managed unit'), { code: 'UNKNOWN_UNIT' });
-    const result = await core.prepareRemoval({ mode, target, scope: 'project', removals: [{ managementId: body.managementId }] }, controls());
+    const group = installedGroups(current,requests,catalogSelections).find(group => group.id === body.managementId);
+    const result = await core.prepareRemoval({ mode, target, scope: 'project', removals: (group?.managementIds || [body.managementId]).map(managementId => ({managementId})) }, controls());
     const removedEntry = current.entries.find(entry => entry.managementId === body.managementId);
     const prepared = await storePrepared(result, 'remove', null, removedEntry.framework === 'extensions' && !!removedEntry.plugins?.length);
     const removedFramework = current.entries.find(entry => entry.managementId === body.managementId)?.framework;
@@ -291,15 +372,31 @@ async function dispatch(action, body) {
     if (!selected || selected.id !== body.id || selected.context !== body.context || selected.result.review?.reviewDigest !== body.reviewDigest || hash({ draft, organization, generation }) !== selected.context) throw Object.assign(Error('Review changed or was already used. Prepare again.'), { code: 'REVIEW_STALE' });
     if (!selected.applyAllowed) throw Object.assign(Error('No applicable project-file handle in this review'), { code: 'APPLY_UNAVAILABLE' });
     review = null; generation++;
+    if (selected.catalogSelection) {
+      pendingCatalogApply={selection:selected.catalogSelection,request:selected.request};
+      await persist();
+    }
     const result = await core.apply(selected.result.handle, { approved: true, origin: 'interactive', reviewDigest: body.reviewDigest }, controls(selected.request));
-    if (selected.request && result.completion === 'complete') {
+    const retainedPartial = selected.catalogSelection && ['incomplete','cancelled'].includes(result.completion) &&
+      (await inventory()).entries.some(entry => selectionOwnsEntry(selected.catalogSelection,entry));
+    if (selected.request && (result.completion === 'complete' || retainedPartial)) {
       lastRequest = selected.request;
-      requests[requestUnit(selected.request)] = selected.request;
+      const key=selected.catalogSelection?.key || requestUnit(selected.request);
+      if (selected.catalogSelection) catalogSelections[key]=selected.catalogSelection;
+      requests[key] = selected.request;
+    }
+    if (selected.catalogSelection || selected.request && result.completion === 'complete') {
+      pendingCatalogApply=null;
       await persist();
     }
     if (selected.operation === 'remove' && result.completion === 'complete') {
       const remaining = await inventory();
-      const stillPresent = selected.removedUnit === 'instructions' ? remaining.entries.some(entry => entry.managementId === 'project-instructions') : remaining.entries.some(entry => entry.framework === selected.removedUnit || entry.items?.some(item => item.startsWith(selected.removedUnit + '.')));
+      const stillPresent = selected.removedUnit === 'instructions' ? remaining.entries.some(entry => entry.managementId === 'project-instructions') : installedGroups(remaining,requests,catalogSelections).some(group => group.wholePlugin && group.framework === selected.removedUnit);
+      for (const [key, selection] of Object.entries(catalogSelections)) {
+        if (!remaining.entries.some(entry => selectionOwnsEntry(selection,entry))) {
+          delete requests[key];delete catalogSelections[key];
+        }
+      }
       if (selected.removedUnit && !stillPresent) delete requests[selected.removedUnit];
       lastRequest = Object.values(requests).at(-1) || null; await persist();
     }
@@ -374,23 +471,33 @@ async function dispatch(action, body) {
     for (const [unit, saved] of Object.entries(requests)) {
       // Persisted intent excludes source bytes. Restore only members in the exact pinned
       // Catalog acquisition cache; check never acquires new content from the network.
-      const request = saved.files ? { ...saved, files: saved.files.map(file => ({ ...file, bytes: file.bytes || (unit === 'extensions' ? extensionsInstaller.files() : sourceResult?.files)?.find(source => source.path === file.sourcePath && source.sha256 === file.sha256)?.bytes })) } : saved;
+      const current = catalogSelections[unit] ? currentCatalogPolicyRequest(unit, installed) : saved;
+      if (!current) {
+        checks.push({unit,check:{status:'refused',reason:'The remaining installed selection could not be reconstructed.'},admission:null});
+        continue;
+      }
+      const request = catalogSelections[unit] ? {...current,files:await Promise.all(current.files.map(async ref=>({...ref,bytes:await cachedCatalogBytes(root,ref)})))} : saved.files ? { ...saved, files: saved.files.map(file => ({ ...file, bytes: file.bytes || (unit === 'extensions' ? extensionsInstaller.files() : sourceResult?.files)?.find(source => source.path === file.sourcePath && source.sha256 === file.sha256)?.bytes })) } : saved;
       const checkControls = request.schema === 'urn:aihq:core:plan-request:0.1.0' ? { catalog: controls(request).catalog } : {};
       const result = await core.checkFiles(request, checkControls);
-      const admission = await currentAdmission(saved, installed);
-      checks.push({ unit, check: result, admission, explanation:explainFileCheck(unit, saved, result, installed) });
+      const admission = await currentAdmission(current, installed);
+      checks.push({ unit:catalogSelections[unit]?retainedCatalogItems(catalogSelections[unit],installed).join(', '):unit, check: result, admission, explanation:explainFileCheck(unit, saved, result, installed) });
     }
     const result = checks.at(-1) || { check: { status: 'refused', reason: 'No completed request retained in this workspace.' }, admission: null };
-    return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.values(requests).some(request => request.changes?.some(change => change.managementId === entry.managementId) || request.plan && (entry.framework === requestUnit(request) || entry.items?.some(item => item.startsWith(requestUnit(request) + '.'))))).map(entry => entry.managementId) } };
+    return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.entries(requests).some(([key,request]) => {
+      if (catalogSelections[key]) return selectionOwnsEntry(catalogSelections[key],entry);
+      return request.changes?.some(change => change.managementId===entry.managementId) || request.plan && (entry.framework===key || entry.items?.some(item => item.startsWith(key+'.')));
+    })).map(entry => entry.managementId) } };
   }
   if (action === 'inspect') {
     inspection = await core.inspect({ target: ['node', 'npm', 'git'], offline: true, project }); remember('inspect', inspection);
     return state();
   }
   if (action === 'repair') {
-    const request = { schema: 'urn:aihq:core:repair-request:0.1.0', repair: 'node-npm-ca', targets: ['node', 'npm'], network: 'off' };
+    const targets=suggestedRepairTargets();
+    if (!targets.length) return {...await state(),repairApply:'The current inspection has not suggested this repair. Inspect the environment and resolve the reported problem first.'};
+    const request = { schema: 'urn:aihq:core:repair-request:0.1.0', repair: 'node-npm-ca', targets, network: 'off' };
     const result = await core.prepare(request, { logging: 'off' });
-    repair = clean(result); remember('prepare', result, { repair: { id: 'node-npm-ca', targets: ['node', 'npm'] } });
+    repair = clean(result); remember('prepare', result, { repair: { id: 'node-npm-ca', targets } });
     return { ...await state(), repairApply: 'Not applied. This prepares actual trust configuration; system repair Apply requires separate review in the intended account. This example has no repair Apply route.' };
   }
   if (action === 'report') {

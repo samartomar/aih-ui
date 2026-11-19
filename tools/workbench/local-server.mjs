@@ -7,14 +7,16 @@ import { randomBytes } from 'node:crypto';
 import { createLocalCatalog } from './local-catalog.mjs';
 import { profileLibrary } from './profile-reader.mjs';
 
+import { catalogInstallReason } from './catalog-install.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
-const actions = new Set(['draft', 'policy', 'policy-preview', 'record-review', 'prepare', 'remove', 'apply', 'check', 'check-claude', 'inspect', 'repair', 'report', 'catalog-evidence', 'catalog-plan', 'profile-preview']);
+const actions = new Set(['draft', 'policy', 'policy-preview', 'record-review', 'prepare', 'remove', 'apply', 'check', 'check-claude', 'inspect', 'repair', 'report', 'catalog-evidence', 'catalog-plan', 'catalog-prepare', 'profile-preview']);
 const fail = (message, code = 'INPUT_INVALID', status = 400) => Object.assign(Error(message), { code, status });
 function keys(value, allowed) { return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => allowed.includes(key)); }
 function validate(action, body) {
   if (action === 'record-review') {
-    if (!keys(body, ['mode','digest','company','reviewer','team','decision','note','itemId']) || body.mode !== 'enterprise' ||
-        !/^[a-f0-9]{64}$/.test(body.digest) || !['Accepted for this use','Follow-up needed','Declined'].includes(body.decision) ||
+    if (!keys(body, ['mode','digest','company','reviewer','team','decision','note','itemId','concern']) || body.mode !== 'enterprise' ||
+        !/^[a-f0-9]{64}$/.test(body.digest) || !['False alarm','Accepted risk','Accepted for this use','Follow-up needed','Declined'].includes(body.decision) ||
         !['company','reviewer','note'].every(key => typeof body[key] === 'string' && body[key].trim()) ||
         !['company','reviewer','team','itemId','note'].every(key => typeof body[key] === 'string' && body[key].length <= (key === 'note' ? 2000 : 300))) throw fail('Supply company, reviewer, decision and rationale for the saved policy.');
     return;
@@ -24,15 +26,15 @@ function validate(action, body) {
     return;
   }
   if (action === 'catalog-evidence') { if (!keys(body, ['mode', 'itemId']) || !['enterprise','vibe'].includes(body.mode) || typeof body.itemId !== 'string' || body.itemId.length > 300) throw fail('Invalid Catalog selection');return; }
-  if (action === 'catalog-plan') { if (!keys(body, ['mode', 'items', 'client']) || !['enterprise','vibe'].includes(body.mode) || !Array.isArray(body.items) || body.items.some(id => typeof id !== 'string' || id.length > 300) || typeof body.client !== 'string') throw fail('Invalid plan preview selection');return; }
-  if (!keys(body, ['mode', 'choices', 'text', 'id', 'obligation', 'allowCustom', 'frameworkRules', 'managementId', 'context', 'reviewDigest', 'unit'])) throw fail('Unexpected input');
+  if (action === 'catalog-plan' || action === 'catalog-prepare') { if (!keys(body, ['mode', 'items', 'client']) || !['enterprise','vibe'].includes(body.mode) || !Array.isArray(body.items) || body.items.some(id => typeof id !== 'string' || id.length > 300) || typeof body.client !== 'string') throw fail('Invalid plan preview selection');return; }
+  if (!keys(body, ['mode', 'choices', 'text', 'id', 'obligation', 'allowCustom', 'frameworkRules','itemRules','kindRules','posture','allowedFrameworks','selection', 'managementId', 'context', 'reviewDigest', 'unit'])) throw fail('Unexpected input');
   if (!['enterprise', 'vibe'].includes(body.mode)) throw fail('Unknown mode');
   const expected = {
     draft: ['mode', 'choices', 'text'], policy: ['mode', 'id', 'obligation', 'allowCustom'], 'policy-preview': ['mode', 'id', 'obligation', 'allowCustom'],
     prepare: ['mode'], remove: ['mode', 'managementId'], apply: ['mode', 'id', 'context', 'reviewDigest'],
     check: ['mode'], 'check-claude': ['mode'], inspect: ['mode'], repair: ['mode'], report: ['mode'],
   }[action];
-  const allowed = action.startsWith('policy') ? [...expected, 'frameworkRules'] : ['prepare','check-claude'].includes(action) ? [...expected, 'unit'] : expected;
+  const allowed = action.startsWith('policy') ? [...expected, 'frameworkRules','itemRules','kindRules','posture','allowedFrameworks','selection'] : ['prepare','check-claude'].includes(action) ? [...expected, 'unit'] : expected;
   if (!keys(body, allowed) || expected.some(key => !(key in body))) throw fail('Invalid action fields');
   if ('unit' in body && !['extensions','superpowers', 'instructions'].includes(body.unit)) throw fail('Unknown installation unit');
   if (action === 'draft' && (!keys(body.choices, ['instructions', 'superpowers','extensions']) || !['instructions','superpowers'].every(key => key in body.choices) || Object.values(body.choices).some(value => typeof value !== 'boolean') || typeof body.text !== 'string' || body.text.length > 12000)) throw fail('Invalid draft');
@@ -87,7 +89,8 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
   if (sourceCache) sourceCache = resolve(sourceCache);if (extensionsSourceCache) extensionsSourceCache = resolve(extensionsSourceCache);
   const fullCatalog = await createLocalCatalog(consumer, sourceCache);
   await mkdir(workspace, { recursive: true });
-  if ((await lstat(workspace)).isSymbolicLink() || await realpath(workspace) !== workspace) throw Error('Workspace must be a direct directory');
+  const canonicalWorkspace = await realpath(workspace);
+  if ((await lstat(workspace)).isSymbolicLink() || (process.platform === 'win32' ? canonicalWorkspace.toLowerCase() !== workspace.toLowerCase() : canonicalWorkspace !== workspace)) throw Error('Workspace must be a direct directory');
   const token = randomBytes(32).toString('hex');
   const screen = join(here, '..', '..', 'src', 'workbench');
   const assets = new Map(['index.html', 'workbench.js', 'layout.js'].map(name => [`/${name}`, join(screen, name)]));
@@ -135,24 +138,50 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
           const known = fullCatalog.catalog.frameworks.filter(f => f.id !== 'superpowers').map(f => f.id);
           if (!keys(rules, known) || Array.isArray(rules) || !Object.values(rules).every(rule => ['permitted','recommended','required','prohibited'].includes(rule))) throw fail('Choose known Catalog frameworks and valid obligations.');
         }
+        if (action.startsWith('policy')) {
+          if (input.allowedFrameworks !== undefined && (!Array.isArray(input.allowedFrameworks) || input.allowedFrameworks.length > 1000 || new Set(input.allowedFrameworks).size !== input.allowedFrameworks.length || input.allowedFrameworks.some(id => typeof id !== 'string' || !id || id.length > 300))) throw fail('Choose bounded framework identifiers for this Catalog boundary.');
+          if (input.selection !== undefined) {
+            if (!keys(input.selection,['items','client']) || !Array.isArray(input.selection.items) || !input.selection.items.length || input.selection.items.length > 100 || !input.selection.items.every(id => typeof id === 'string') || typeof input.selection.client !== 'string') throw fail('Choose a valid Catalog selection for policy impact.');
+            const selected = fullCatalog.catalogPreview(input.selection.items,input.selection.client);
+            input.selectionRequest = selected.requestParts;
+          }
+          if (input.posture !== undefined && !['catalog-default','only-selected'].includes(input.posture)) throw fail('Unknown policy posture.');
+          for (const [field,known] of [['itemRules',fullCatalog.catalog.items.map(item => item.id)],['kindRules',[...new Set(fullCatalog.catalog.items.map(item => item.kind))]]]) {
+            if (input[field] !== undefined && (!keys(input[field],known) || !Object.values(input[field]).every(value => ['permitted','recommended','required','prohibited'].includes(value)))) throw fail('Choose known Catalog items or kinds and valid obligations.');
+          }
+        }
         if (action === 'record-review') {
           const record = input.itemId ? await fullCatalog.evidence(input.itemId) : null;
+          if (['False alarm','Accepted risk'].includes(input.decision) && !record) throw fail('Attach the item or concern being reviewed.');
+          if (input.concern && (!keys(input.concern,['tool','ruleId']) || !['tool','ruleId'].every(key => typeof input.concern[key] === 'string' && input.concern[key].length <= 300) || !record?.findings.some(finding => finding.tool === input.concern.tool && finding.ruleId === input.concern.ruleId))) throw fail('Choose a concern from this exact assessment.');
           const reference = url => url && ({url, sha256:fullCatalog.assets.get(url).sha256});
           input.evidence = record && {itemId:record.id, scanKey:record.scanKey, catalogCommit:fullCatalog.catalog.data.commit,
             status:record.status, revision:record.summary?.revision ?? null, verdict:record.verdict ?? null,
             verification:record.verificationLabel ?? null, reason:record.reason ?? null,
             summary:reference(record.summaryUrl) ?? null, bundle:reference(record.bundleUrl) ?? null, findings:record.assets ?? []};
         }
+        if (action === 'catalog-prepare') {
+          const { requestParts } = fullCatalog.catalogPreview(input.items,input.client);
+          const reason = catalogInstallReason(requestParts);
+          if (reason) throw fail(reason);
+          const operation = mutation.then(() => workers.get(mode).request('catalog-prepare', { parts:requestParts, items:input.items, client:input.client }));
+          mutation=operation.catch(()=>{});
+          return json(200,await operation);
+        }
         if (action === 'profile-preview' || action === 'catalog-plan') {
           const { response: preview, requestParts } = action === 'profile-preview'
             ? fullCatalog.profilePreview(input.profile, input.client)
             : fullCatalog.catalogPreview(input.items, input.client);
           if (mode === 'enterprise') {
-            preview.policyNote = 'A complete plan for this workspace’s Claude Code target is needed for policy preview.';
-            if (requestParts && input.client === 'claude-code') {
-              const assessment = await workers.get(mode).request('profile-admission', requestParts);
+            preview.policyNote = 'A complete plan is needed to check admission for the selected client.';
+            if (requestParts) {
+              const assessment = await workers.get(mode).request('profile-admission', {...requestParts,client:input.client});
               Object.assign(preview, assessment);
             }
+          }
+          if (action === 'catalog-plan') {
+            preview.installReason=catalogInstallReason(requestParts);
+            preview.installable=!preview.installReason;
           }
           return json(200, preview);
         }

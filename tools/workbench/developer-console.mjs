@@ -85,7 +85,7 @@ export function developerConsole(snapshot, diagnosticUrl) {
     <p>The diagnostic can supply evidence for ${supported} of these ${panels.length} panels. Open a captured section to read its measured values.</p>
     <table><thead><tr><th>Console panel</th><th>Core evidence</th><th>Coverage</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
   const style = `<style>
-    .console-map{border:1px solid var(--border-2);border-radius:var(--rs);margin:0 0 1.1rem;background:var(--surface);color:var(--fg)}
+    .section-example a{color:var(--accent);text-decoration:underline}.card.preview{padding-top:1.8rem}.preview::after{top:.35rem}.sec-eyebrow{display:flex;gap:.5rem;flex-wrap:wrap}.console-map{border:1px solid var(--border-2);border-radius:var(--rs);margin:0 0 1.1rem;background:var(--surface);color:var(--fg)}
     .console-map summary{cursor:pointer;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.65rem 1rem;background:var(--ok-soft);color:var(--ok);font-size:.8rem;border-radius:inherit}
     .console-map summary b{margin-left:auto}.console-coverage{padding:1rem}.console-coverage h2{margin:0}.console-coverage p{color:var(--muted);font-size:.85rem}
     .console-coverage table{width:100%;border-collapse:collapse;font-size:.82rem}.console-coverage th,.console-coverage td{text-align:left;vertical-align:top;border-bottom:1px solid var(--border);padding:.5rem}

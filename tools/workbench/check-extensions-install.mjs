@@ -27,7 +27,10 @@ try {
   await page.locator('[data-action="toggle-extensions"]:visible').first().waitFor();
   assert.equal(await check.count(), 0);
   await page.locator('[data-action="toggle-extensions"]:visible').first().click();
+  const prepare = page.waitForResponse(r => r.url() === host.origin + '/api/prepare', {timeout:150000});
   await page.locator('[data-action="prepare-extensions"]:visible').first().click();
+  const prepared = await (await prepare).json();
+  assert.ok(prepared.prepared.result.review.origin?.recipe?.sha256,JSON.stringify(prepared.prepared.result.review.originNote));
   const approve = page.getByRole('button', { name: 'Approve installation', exact: true });
   await approve.waitFor({ timeout: 150000 });
   const run = page.waitForResponse(r => r.url() === host.origin + '/api/apply', { timeout: 150000 });

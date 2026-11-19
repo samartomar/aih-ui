@@ -36,6 +36,7 @@
   --color-kind-hook: #fb923c;
   --color-kind-rule: #f472b6;
   --color-kind-document: #cbd5e1;
+  --color-kind-ai-setup: var(--color-metadata-revision);
   --color-kind-token: #f97316;
   --color-ledger-command: #38bdf8;
   --color-ledger-agent: #c084fc;
@@ -93,6 +94,7 @@ html.light {
   --color-kind-hook: #ad3a07;
   --color-kind-rule: #be185d;
   --color-kind-document: #475569;
+  --color-kind-ai-setup: var(--color-metadata-revision);
   --color-kind-token: #c2410c;
   --color-ledger-command: var(--color-kind-command);
   --color-ledger-agent: var(--color-kind-agent);

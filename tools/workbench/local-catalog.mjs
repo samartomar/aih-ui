@@ -106,7 +106,7 @@ export async function createLocalCatalog(consumer, sourceCache) {
       if (item.kind === 'ai-setup') {
         const { version, executable, launch, settings, mcpItem } = item.aiSetup;
         const server = content.items.find(member => member.id === mcpItem);
-        entry.setup = { version, executable, launch, settings, mcpItem, platform, env: server?.env, enabledTools: server?.enabledTools, disabledTools: server?.disabledTools, startupSeconds: server?.startupSeconds, callSeconds: server?.callSeconds };
+        entry.setup = { version, executable, launch, settings, mcpItem, platform, runtime:item.aiSetup.runtime, doNotRun:item.aiSetup.doNotRun, qualifications:qualifications.filter(record => record.subject.aiSetup === item.id).map(record => ({platform:record.subject.cell,status:record.result.status,reason:record.result.reason})), env: server?.env, enabledTools: server?.enabledTools, disabledTools: server?.disabledTools, startupSeconds: server?.startupSeconds, callSeconds: server?.callSeconds };
       }
       if (indexed) for (const asset of [indexed.summary, indexed.bundle, ...indexed.sarif]) assetPath(asset);
       byId.set(item.id, { item, content, entry });items.push(entry);
@@ -181,7 +181,7 @@ export async function createLocalCatalog(consumer, sourceCache) {
     if (configureTools && ids.every(id => byId.get(id).entry.setup)) {
       return { client, selection: ids, execution: 'preview-only', notice: 'Configuration preview for the selected tools on ' + platform + '.', plan: planTools(ids, client) };
     }
-    return { client, selection: ids, execution: 'preview-only', notice: 'Public Catalog item placement preview. This does not acquire sources, prepare Core, or apply anything. Existing connected execution supports the separate Superpowers whole-plugin recipe and authored Project instructions.', plan: planItems(ids, client, contents) };
+    return { client, selection: ids, execution: 'preview-only', notice: 'Preview the planned project changes. Review installation verifies the required source files and asks Core for an approval review.', plan: planItems(ids, client, contents) };
   }
   function admissionParts(result, ids, client) {
     if (result.status !== 'ok') return null;
