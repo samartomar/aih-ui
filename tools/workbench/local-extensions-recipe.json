@@ -1,0 +1,140 @@
+{
+  "schema": "urn:aihq:catalog:recipe:0.1.0",
+  "id": "workbench-extensions-local-example",
+  "kind": "base",
+  "framework": "extensions",
+  "content": {
+    "repository": "https://github.com/samartomar/aih-extensions",
+    "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa"
+  },
+  "routes": {
+    "claude-code": "local-plugin"
+  },
+  "plugins": {
+    "claude-code": {
+      "source": "extensions",
+      "path": "/",
+      "plugin": "aih-extensions",
+      "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa",
+      "marketplace": "aih-extensions"
+    }
+  },
+  "members": [
+    {
+      "item": "extensions.agent.code-reviewer",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.agent.security-auditor",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.agent.test-engineer",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.agent.web-performance-auditor",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.hook.git-guard",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.hook.lanes-card",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.hook.skill-guard",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.api-and-interface-design",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.ask-sam",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.browser-testing-with-devtools",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.ci-cd-and-automation",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.code-simplification",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.constraint-driven-development",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.deprecation-and-migration",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.documentation-and-adrs",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.doubt-driven-development",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.frontend-ui-engineering",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.git-workflow-and-versioning",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.idea-refine",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.install-commit-gate",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.observability-and-instrumentation",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.performance-optimization",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.security-and-hardening",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.setup-pre-commit",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.ship",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.shipping-and-launch",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.source-driven-development",
+      "preTicked": true
+    },
+    {
+      "item": "extensions.skill.webperf",
+      "preTicked": true
+    }
+  ],
+  "data": {
+    "repository": "https://github.com/samartomar/aih-catalog",
+    "commit": "7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26"
+  }
+}
