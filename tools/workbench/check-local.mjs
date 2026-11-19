@@ -148,7 +148,7 @@ try {
   }
   const inspection = await post('inspect', { mode: 'vibe' }); assert.equal(inspection.inspection.schema, 'urn:aihq:core:inspection:0.1.0');
   assert.equal(inspection.reportDigest, null, 'Inspection alone must not advertise a downloadable capture');
-  const repair = await post('repair', { mode: 'vibe' }); if (inspection.inspection.repairChoices?.length) { assert.ok(repair.repair); assert.match(repair.repairApply,/Not applied/); } else { assert.equal(repair.repair,null); assert.match(repair.repairApply,/not suggested/); }
+  const repair = await post('repair', { mode: 'vibe' }); if (inspection.repairInfo.suggestedTargets.length) { assert.ok(repair.repair); assert.match(repair.repairApply,/Not applied/); } else { assert.equal(repair.repair,null); assert.match(repair.repairApply,/not suggested/); }
   checks.push(`offline inspection and real node-npm-ca preparation (${repair.repair?.status || 'not indicated'}), no repair Apply`);
   const report = await post('report', { mode: 'vibe' });
   assert.equal(report.history.at(-1).support.status, 'rendered', JSON.stringify(report.history.at(-1).support));

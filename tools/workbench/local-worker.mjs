@@ -192,7 +192,7 @@ async function installedPolicyChecks(installed) {
   for (const group of installedGroups(installed,requests,catalogSelections)) {
     const tracked = group.wholePlugin ? [] : Object.values(catalogSelections).filter(selection => group.entries.some(entry => selectionOwnsEntry(selection,entry)));
     if (tracked.length) {
-      for (const selection of tracked) if (!units.has(selection.key)) units.set(selection.key,{unit:selection.key,label:selection.items.join(', ')+' · '+selection.client,removalId:group.id});
+      for (const selection of tracked) if (!units.has(selection.key)) units.set(selection.key,{unit:selection.key,label:retainedCatalogItems(selection,installed).join(', ')+' · '+selection.client,removalId:group.id});
     } else {
       const unit = group.wholePlugin ? group.framework : group.id==='project-instructions'?'instructions':group.id;
       if (!units.has(unit)) units.set(unit,{unit,label:unit==='instructions'?'Project instructions':group.label,removalId:group.id});
@@ -205,11 +205,14 @@ async function installedPolicyChecks(installed) {
     return { ...row, status };
   }));
 }
+function retainedCatalogItems(selection,installed) {
+  const managed = new Set(installed.entries.filter(entry => selectionOwnsEntry(selection,entry)).flatMap(entry => [entry.managementId,...(entry.items||[])]));
+  return selection.items.filter(id => managed.has(id));
+}
 function currentCatalogPolicyRequest(key, installed) {
   const saved = requests[key], selection = catalogSelections[key];
   if (!saved || !selection) return saved;
-  const managed = new Set(installed.entries.filter(entry => selectionOwnsEntry(selection,entry)).flatMap(entry => [entry.managementId,...(entry.items || [])]));
-  const remaining = selection.items.filter(id => managed.has(id));
+  const remaining = retainedCatalogItems(selection,installed);
   if (remaining.length === selection.items.length) return saved;
   if (!remaining.length) return null;
   const plan = reader.planInstall(remaining,saved.contents,saved.profiles,{scope:'project',data:saved.plan.data});
@@ -234,9 +237,14 @@ async function diagnosticReport() {
   const diagnostic = await harness.diagnose({ requestId: randomUUID(), targets: ['node', 'git'], network: 'off', project });
   return contracts.createReport({ diagnostic, producer: { name: '@aihq/core', version: '0.0.0-dev.1', revision: snapshot.packages.find(item => item.name === '@aihq/core')?.commit || null }, observedAt: new Date().toISOString(), acquisition: 'newly-acquired', redaction: { homePaths: [root] } });
 }
+function suggestedRepairTargets() {
+  if (!inspection) return [];
+  const guidance = contracts.getGuidance({kind:'inspect',result:inspection},{platform:process.platform});
+  return [...new Set((guidance.items||[]).flatMap(item => item.repairs||[]).filter(repair => repair.id==='node-npm-ca').flatMap(repair => repair.targets))];
+}
 async function state() {
   const installed = await inventory();
-  return { mode, installedGroups:installedGroups(installed,requests,catalogSelections), repairInfo:{platform:process.platform,definition:harnessPublic.repairIndex.find(repair => repair.id === 'node-npm-ca')}, connectedFramework: { unit:'extensions', id:'extensions', name:'AIH Extensions', version:'0.6.0', plugin:'aih-extensions' }, extensionsDerivation:extensionsInstaller.derivation(), project, home: process.env.USERPROFILE || process.env.HOME, organization, policyDigest: policyDigest(), reviews, generation, draft, inventory: installed, installedPolicyChecks: await installedPolicyChecks(installed), prepared: review ? { id: review.id, context: review.context, result: clean(review.result), operation: review.operation, catalogSelection: review.catalogSelection, applyAllowed: review.applyAllowed, nativePlugin: review.nativePlugin } : null, history, inspection, repair, report: latestReport, reportDigest: latestReport?.status === 'ok' ? hash(latestReport.snapshot) : null, source: sourceResult ? { status: sourceResult.status, reason: sourceResult.reason, commit: sourceResult.source?.commit } : null };
+  return { mode, installedGroups:installedGroups(installed,requests,catalogSelections), repairInfo:{platform:process.platform,suggestedTargets:suggestedRepairTargets(),definition:harnessPublic.repairIndex.find(repair => repair.id === 'node-npm-ca')}, connectedFramework: { unit:'extensions', id:'extensions', name:'AIH Extensions', version:'0.6.0', plugin:'aih-extensions' }, extensionsDerivation:extensionsInstaller.derivation(), project, home: process.env.USERPROFILE || process.env.HOME, organization, policyDigest: policyDigest(), reviews, generation, draft, inventory: installed, installedPolicyChecks: await installedPolicyChecks(installed), prepared: review ? { id: review.id, context: review.context, result: clean(review.result), operation: review.operation, catalogSelection: review.catalogSelection, applyAllowed: review.applyAllowed, nativePlugin: review.nativePlugin } : null, history, inspection, repair, report: latestReport, reportDigest: latestReport?.status === 'ok' ? hash(latestReport.snapshot) : null, source: sourceResult ? { status: sourceResult.status, reason: sourceResult.reason, commit: sourceResult.source?.commit } : null };
 }
 async function storePrepared(result, operation, request, allowNative = false, catalogSelection = null) {
   const context = hash({ draft, organization, generation });
@@ -472,7 +480,7 @@ async function dispatch(action, body) {
       const checkControls = request.schema === 'urn:aihq:core:plan-request:0.1.0' ? { catalog: controls(request).catalog } : {};
       const result = await core.checkFiles(request, checkControls);
       const admission = await currentAdmission(current, installed);
-      checks.push({ unit:catalogSelections[unit]?.items.join(', ')||unit, check: result, admission, explanation:explainFileCheck(unit, saved, result, installed) });
+      checks.push({ unit:catalogSelections[unit]?retainedCatalogItems(catalogSelections[unit],installed).join(', '):unit, check: result, admission, explanation:explainFileCheck(unit, saved, result, installed) });
     }
     const result = checks.at(-1) || { check: { status: 'refused', reason: 'No completed request retained in this workspace.' }, admission: null };
     return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.entries(requests).some(([key,request]) => {
@@ -485,10 +493,11 @@ async function dispatch(action, body) {
     return state();
   }
   if (action === 'repair') {
-    if (!inspection?.repairChoices?.length) return {...await state(),repairApply:'The current inspection has not suggested this repair. Inspect the environment and resolve the reported problem first.'};
-    const request = { schema: 'urn:aihq:core:repair-request:0.1.0', repair: 'node-npm-ca', targets: ['node', 'npm'], network: 'off' };
+    const targets=suggestedRepairTargets();
+    if (!targets.length) return {...await state(),repairApply:'The current inspection has not suggested this repair. Inspect the environment and resolve the reported problem first.'};
+    const request = { schema: 'urn:aihq:core:repair-request:0.1.0', repair: 'node-npm-ca', targets, network: 'off' };
     const result = await core.prepare(request, { logging: 'off' });
-    repair = clean(result); remember('prepare', result, { repair: { id: 'node-npm-ca', targets: ['node', 'npm'] } });
+    repair = clean(result); remember('prepare', result, { repair: { id: 'node-npm-ca', targets } });
     return { ...await state(), repairApply: 'Not applied. This prepares actual trust configuration; system repair Apply requires separate review in the intended account. This example has no repair Apply route.' };
   }
   if (action === 'report') {

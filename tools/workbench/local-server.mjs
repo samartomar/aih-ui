@@ -139,7 +139,7 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
           if (!keys(rules, known) || Array.isArray(rules) || !Object.values(rules).every(rule => ['permitted','recommended','required','prohibited'].includes(rule))) throw fail('Choose known Catalog frameworks and valid obligations.');
         }
         if (action.startsWith('policy')) {
-          if (input.allowedFrameworks !== undefined && (!Array.isArray(input.allowedFrameworks) || new Set(input.allowedFrameworks).size !== input.allowedFrameworks.length || input.allowedFrameworks.some(id => !fullCatalog.catalog.frameworks.some(framework => framework.id === id)))) throw fail('Choose known frameworks for this Catalog boundary.');
+          if (input.allowedFrameworks !== undefined && (!Array.isArray(input.allowedFrameworks) || input.allowedFrameworks.length > 1000 || new Set(input.allowedFrameworks).size !== input.allowedFrameworks.length || input.allowedFrameworks.some(id => typeof id !== 'string' || !id || id.length > 300))) throw fail('Choose bounded framework identifiers for this Catalog boundary.');
           if (input.selection !== undefined) {
             if (!keys(input.selection,['items','client']) || !Array.isArray(input.selection.items) || !input.selection.items.length || input.selection.items.length > 100 || !input.selection.items.every(id => typeof id === 'string') || typeof input.selection.client !== 'string') throw fail('Choose a valid Catalog selection for policy impact.');
             const selected = fullCatalog.catalogPreview(input.selection.items,input.selection.client);

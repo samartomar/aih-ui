@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { createPrototypeServer } from './local-server.mjs';
@@ -36,10 +36,21 @@ try {
   assert.ok(installed.inventory.entries.some(entry => entry.managementId===item));
   assert.ok(installed.history.filter(entry => ['prepare','run'].includes(entry.kind)).every(entry => entry.guidance.status==='complete'));
   await host.close();
+  // Restore the on-disk boundary left by a stop after Core wrote its receipt
+  // and before the host finished recording the result.
+  const intentPath=join(workspace,'vibe','intent.json');
+  const intent=JSON.parse(await readFile(intentPath,'utf8'));
+  const selection=Object.values(intent.catalogSelections)[0];
+  intent.pendingCatalogApply={selection,request:intent.requests[selection.key]};
+  delete intent.requests[selection.key];
+  delete intent.catalogSelections[selection.key];
+  await writeFile(intentPath,JSON.stringify(intent));
   host = await createPrototypeServer(options);
   await page.goto(host.origin+'/?view=installed&mode=vibe');
   const checked = await call('check',action('check'));
   assert.equal(checked.check.fileState,'match');
+  assert.deepEqual(checked.coverage.untrackedInventory,[]);
+  assert.equal(JSON.parse(await readFile(intentPath,'utf8')).pendingCatalogApply,null);
   const removal = await call('remove',action('remove:'+item));
   assert.equal(removal.prepared.operation,'remove');
   const removed = await call('apply',action('install'));
