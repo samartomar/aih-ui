@@ -37,18 +37,6 @@
       "preTicked": true
     },
     {
-      "item": "extensions.hook.git-guard",
-      "preTicked": true
-    },
-    {
-      "item": "extensions.hook.lanes-card",
-      "preTicked": true
-    },
-    {
-      "item": "extensions.hook.skill-guard",
-      "preTicked": true
-    },
-    {
       "item": "extensions.skill.api-and-interface-design",
       "preTicked": true
     },
@@ -136,5 +124,25 @@
   "data": {
     "repository": "https://github.com/samartomar/aih-catalog",
     "commit": "7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26"
-  }
+  },
+  "options": [
+    {
+      "id": "hooks",
+      "pick": "several",
+      "items": [
+        {
+          "item": "extensions.hook.git-guard",
+          "preTicked": false
+        },
+        {
+          "item": "extensions.hook.lanes-card",
+          "preTicked": false
+        },
+        {
+          "item": "extensions.hook.skill-guard",
+          "preTicked": false
+        }
+      ]
+    }
+  ]
 }
