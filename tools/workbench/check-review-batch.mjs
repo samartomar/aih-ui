@@ -83,6 +83,9 @@ try {
   await page.locator('#reset').click();await page.locator('#main-content .item-organization-review').getByText('False alarm',{exact:true}).waitFor();
   await page.screenshot({path:join(workspace,'scan-desktop.png')});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(workspace,'scan-mobile.png')});
+  await page.setViewportSize({width:1280,height:900});await page.locator('[data-action="scan-return"]').click();
+  await page.locator('[data-view="catalog"]:visible').first().click();await page.locator('[data-action="open-item-findings"]:visible').first().click();
+  await page.locator('[data-action="scan-return"]').filter({hasText:'Back to Catalog'}).waitFor();
   await post('draft',{choices:{instructions:true,superpowers:true,extensions:false},text:'Disposable policy impact instructions.'});
   const plugin=await post('prepare',{unit:'superpowers'});assert.equal(plugin.prepared.result.status,'ready');
   const pluginInstalled=await post('apply',{id:plugin.prepared.id,context:plugin.prepared.context,reviewDigest:plugin.prepared.result.review.reviewDigest});

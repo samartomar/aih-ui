@@ -732,7 +732,7 @@ async function runAction(action) {
     state.view='catalog';state.frameworkFilter=tool.framework;state.kind='all';state.search='';state.page=0;selectItem(null);state.notice='Supporting Catalog content for '+tool.title+'. Tool configuration stays in Tools.';return;
   }
   if(action==='show-selected-item'&&record()){state.frameworkFilter='all';state.kind='all';state.search='';state.page=Math.floor(records.findIndex(function(item){return item.id===state.recordId;})/40);state.view='catalog';state.revealResult=null;return;}
-  if(action==='open-item-findings'&&record()){if(state.scanReturn!=='policy')state.scanReturn=state.view==='policy'?'policy':'catalog';state.view='scan';state.inspector='security';return;}
+  if(action==='open-item-findings'&&record()){state.scanReturn=state.reviewPicking||state.view==='policy'?'policy':'catalog';state.reviewPicking=false;state.view='scan';state.inspector='security';return;}
   if(action==='selection-close'){selectItem(null);state.notice='Item inspector closed. Items in your plan preview are retained.';return;}
   if(action.startsWith('profile-member-evidence:')){var memberId=action.slice(24);if(profileEvidenceMembers().some(function(item){return item.id===memberId;})){selectItem(memberId);state.view='scan';state.inspector='security';state.notice='Exact selected profile member. Return to Profiles for the retained bundle.';}return;}
   if(action==='profile-create'){createProfile();return;}
@@ -801,7 +801,7 @@ async function runAction(action) {
   if(action==='scan-return'){state.view=state.scanReturn==='policy'?'policy':'catalog';return;}
   if(action==='review-concern'&&admin()&&finding()){reviewDraft.itemId=record().id;reviewDraft.concern={tool:finding().tool,ruleId:finding().ruleId};state.view='policy';return;}
   if(action==='review-pick' && admin()) {
-    state.scanReturn='policy';state.view='catalog';state.notice='Select the item you reviewed, then open its findings to attach the evidence.';
+    state.reviewPicking=true;state.scanReturn='policy';state.view='catalog';state.notice='Select the item you reviewed, then open its findings to attach the evidence.';
     return;
   }
   if(action==='review-attach' && admin() && record()) {reviewDraft.itemId=record().id;reviewDraft.concern=null;state.view='policy';state.notice='Selected evidence for the review record.';return;}
