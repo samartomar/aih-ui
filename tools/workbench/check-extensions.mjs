@@ -59,6 +59,27 @@ try {
   assert.equal(settings.enabledPlugins['superpowers@superpowers'], true);
   assert.equal(settings.enabledPlugins['aih-extensions@aihq-extensions'], true);
   assert.ok(settings.extraKnownMarketplaces.superpowers);
+  const superpowers = result => result.checks.find(row => row.unit === 'superpowers');
+  const matching = superpowers(checked);
+  assert.equal(matching.check.fileState, 'match', 'another plugin can share and reformat Claude settings');
+  assert.equal(matching.explanation.label, 'Matches');
+  const settingsPath = join(workspace, 'enterprise', 'project', '.claude', 'settings.json');
+  const originalSettings = await readFile(settingsPath);
+  try {
+    settings.enabledPlugins['superpowers@superpowers'] = false;
+    await writeFile(settingsPath, JSON.stringify(settings));
+    const disabled = superpowers(await post('check', {}));
+    assert.equal(disabled.check.fileState, 'changed');
+    assert.match(disabled.explanation.title, /enabled setting changed/i);
+    settings.enabledPlugins['superpowers@superpowers'] = true;
+    settings.extraKnownMarketplaces.superpowers.source.path = './another-marketplace';
+    await writeFile(settingsPath, JSON.stringify(settings));
+    const redirected = superpowers(await post('check', {}));
+    assert.match(redirected.explanation.title, /marketplace setting changed/i);
+    await writeFile(settingsPath, '{');
+    const unreadable = superpowers(await post('check', {}));
+    assert.equal(unreadable.explanation.label, 'Check incomplete');
+  } finally { await writeFile(settingsPath, originalSettings); }
   const native = await post('check-claude', { unit:'extensions' });
   assert.equal(native.clientCheck.status, expected, JSON.stringify(native.clientCheck));
   assert.equal(native.clientCheck.pluginId, 'aih-extensions@aihq-extensions');
@@ -88,7 +109,7 @@ try {
       assert.equal(disabled.status, 'not-loaded', JSON.stringify(disabled));
     } finally { await writeFile(settingsPath, settingsBytes); }
   }
-  const evidence = { status:'passed', workspace, recipe:extensionsRecipeCommit, native:cold.clientCheck, alteredCache, disabled, checks:checked.checks.map(row => ({ unit:row.unit, fileState:row.check.fileState, observation:row.check.observation, admitted:row.admission?.value?.admitted })), preserved:'Superpowers source inventory, retained request, policy and enabled setting; native CLI may change Core’s observation of the shared settings file.' };
+  const evidence = { status:'passed', workspace, recipe:extensionsRecipeCommit, native:cold.clientCheck, alteredCache, disabled, checks:checked.checks.map(row => ({ unit:row.unit, fileState:row.check.fileState, observation:row.check.observation, admitted:row.admission?.value?.admitted })), preserved:'Superpowers files and managed settings match after native installation of AIH Extensions.' };
   await writeFile(join(workspace,'acceptance.json'), JSON.stringify(evidence,null,2));
   await writeFile(join(workspace,'extensions-prepared.json'), JSON.stringify(prepared,null,2));
   console.log(JSON.stringify(evidence));
