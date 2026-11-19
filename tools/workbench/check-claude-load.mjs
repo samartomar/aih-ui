@@ -20,12 +20,12 @@ try {
   const button = panel.getByRole('button', { name: 'Check in Claude Code', exact: true });
   await button.waitFor();
   const before = await (await fetch(host.origin + '/api/session')).json();
-  assert.ok(before.enterprise.inventory.entries.some(entry => entry.framework === 'superpowers' && entry.localPlugin));
+  assert.ok(before.enterprise.inventory.entries.some(entry => entry.framework === 'extensions' && entry.plugins?.length));
   const response = page.waitForResponse(r => r.url() === host.origin + '/api/check-claude' && r.request().method() === 'POST');
   await button.click();
   const result = await (await response).json();
   assert.equal(result.clientCheck?.status, expected, JSON.stringify(result.clientCheck));
-  assert.equal(result.clientCheck.pluginId, 'superpowers@superpowers');
+  assert.equal(result.clientCheck.pluginId, 'aih-extensions@aihq-extensions');
   assert.deepEqual(result.inventory, before.enterprise.inventory);
   await panel.getByText(result.clientCheck.message, { exact: true }).waitFor();
   const heading = { loaded: 'Loaded in Claude Code', 'not-loaded': 'Not loaded in Claude Code', unconfirmed: 'Load not confirmed' };

@@ -1,7 +1,7 @@
 {
-  "name": "workbench-extensions-local-example",
+  "name": "workbench-extensions-native-example",
   "version": "1.0.0",
-  "description": "Workbench-authored local-plugin recipe for the Catalog-pinned AIH Extensions source. Whole-plugin inventory is derived from those source bytes through public Catalog producer APIs; it is not a published Catalog content addition.",
+  "description": "Workbench-authored pinned native-plugin recipe for AIH Extensions. Public Catalog derives the whole-plugin inventory from the exact pinned source; the plugin inventory is not presented as published Catalog content.",
   "author": "Workbench example",
   "license": "Apache-2.0",
   "keywords": [

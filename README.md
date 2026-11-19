@@ -38,6 +38,8 @@ npm run preview:workbench -- --consumer /path/to/consumer --workspace /path/to/d
 
 Open the loopback address printed by the host. A consumer can supply `public/workbench/comparison.json` for the optional recorded release comparison. Native plugin checks require the Core build that exports `observeClaudePlugins` from `@aihq/core/harness/runtime`.
 
+In **Installed & configure**, choose **AIH Extensions**, review its two Claude Code commands and approve the project installation. **Check in Claude Code** asks the client which plugin it loaded and compares the loaded files with the reviewed source. The check runs on Windows with hooks disabled and sends no model prompt. Installed files, current organization policy and the client’s load result each have their own status.
+
 ## What it must never contain
 
 - Policy rules, validation, digests or compile logic. Those belong to `@aihq/core`.

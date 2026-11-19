@@ -4,10 +4,10 @@ import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { createPrototypeServer } from './local-server.mjs';
 
-const [consumer, output, sourceCache, recipeCommit] = process.argv.slice(2);
-if (!recipeCommit) throw Error('Usage: node check-install-summary.mjs <consumer> <output-parent> <source-cache> <recipe-commit>');
+const [consumer, output, extensionsSourceCache] = process.argv.slice(2);
+if (!consumer || !output) throw Error('Supply a packed consumer and a disposable output directory.');
 const workspace = await mkdtemp(join(resolve(output), 'install-summary-'));
-const host = await createPrototypeServer({ consumer, workspace, sourceCache, recipeCommit });
+const host = await createPrototypeServer({ consumer, workspace, extensionsSourceCache });
 let browser;
 try {
   const session = async () => (await fetch(host.origin + '/api/session')).json();
@@ -16,7 +16,7 @@ try {
     const response = await fetch(host.origin + '/api/policy', {
       method: 'POST',
       headers: { Origin: host.origin, 'Content-Type': 'application/json', 'X-Workbench-Token': token },
-      body: JSON.stringify({ mode: 'enterprise', id: 'install-summary-example', obligation, allowCustom: true }),
+      body: JSON.stringify({ mode: 'enterprise', id: 'install-summary-example', obligation: 'permitted', frameworkRules: { extensions: obligation }, allowCustom: true }),
     });
     assert.equal(response.status, 200);
   }
@@ -35,15 +35,15 @@ try {
     await panel.waitFor();
     return prepared;
   }
-  await click('toggle-superpowers');
-  const plugin = await prepare('superpowers');
+  await click('toggle-extensions');
+  const plugin = await prepare('extensions');
   assert.ok(plugin.applyAllowed);
   await summary.waitFor();
   const steps = plugin.result.review.steps;
   const text = await summary.innerText();
-  for (const expected of [/Superpowers/i, /\.claude\/settings\.json/, /register/i, /enabl/i, /session.start/i]) assert.match(text, expected);
+  for (const expected of [/AIH Extensions/i, /plugin marketplace add/i, /plugin install/i, /git-guard/i, /--scope project/i]) assert.match(text, expected);
   const unchanged = steps.filter(s => s.effect === 'already-satisfied').length;
-  assert.ok(unchanged > 0 && text.includes(String(unchanged)));
+  assert.equal(steps.length, 2);
   const all = panel.locator('details').filter({ has: page.locator('summary', { hasText: 'View all ' + steps.length + ' operations' }) });
   await all.locator('summary').click();
   assert.equal(await all.locator('ol.review-operations > li').count(), steps.length);
@@ -57,10 +57,10 @@ try {
   await click('toggle-instructions');
   await prepare('instructions');
   await summary.getByText(/CLAUDE\.md/).first().waitFor();
-  assert.doesNotMatch(await summary.innerText(), /Superpowers|session.start/i);
+  assert.doesNotMatch(await summary.innerText(), /aih-extensions|git-guard/i);
   await savePolicy('prohibited');
   await page.reload();
-  const blocked = await prepare('superpowers');
+  const blocked = await prepare('extensions');
   assert.equal(blocked.applyAllowed, false);
   await summary.getByText(/unavailable|cannot|blocked|denied|no changes|not available|not allowed/i).first().waitFor();
   assert.ok(await approve.isDisabled());
