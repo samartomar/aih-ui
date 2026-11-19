@@ -81,7 +81,7 @@ const change = {
 const identity = await contracts.deriveChangeIdentity({ change });
 if (identity.status !== 'ok') throw Error(JSON.stringify(identity));
 const target = { project, client: { id: 'claude-code', surface: 'cli' }, repository: 'https://example.invalid/docs-site' };
-let catalogSelections = {};
+let catalogSelections = {}, pendingCatalogApply = null;
 let organization = null, generation = 0, review = null, lastRequest = null, requests = {};
 let draft = { choices: { instructions: false, superpowers: false, extensions: false }, text: 'Use the project conventions. Review changes before committing.' };
 let history = [], inspection = null, repair = null, sourceResult = null, latestReport = null;
@@ -125,7 +125,21 @@ if (mode === 'enterprise') {
   }
 }
 try { organization = JSON.parse(await readFile(policyPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-try { const saved = JSON.parse(await readFile(join(root, 'intent.json'), 'utf8')); catalogSelections=saved.catalogSelections||{}; draft = saved.draft; lastRequest = saved.lastRequest; requests = saved.requests || (lastRequest ? { [lastRequest.schema.includes('change-request') ? 'instructions' : 'superpowers']: lastRequest } : {}); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+try { const saved = JSON.parse(await readFile(join(root, 'intent.json'), 'utf8')); pendingCatalogApply=saved.pendingCatalogApply||null; catalogSelections=saved.catalogSelections||{}; draft = saved.draft; lastRequest = saved.lastRequest; requests = saved.requests || (lastRequest ? { [lastRequest.schema.includes('change-request') ? 'instructions' : 'superpowers']: lastRequest } : {}); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+// A process can stop after Core records a receipt and before the browser receives its run.
+if (pendingCatalogApply) {
+  const {selection, request} = pendingCatalogApply;
+  if ((await inventory()).entries.some(entry => selectionOwnsEntry(selection,entry))) {
+    catalogSelections[selection.key]=selection;
+    requests[selection.key]=request;
+  }
+  pendingCatalogApply=null;
+  await persist();
+}
+function selectionOwnsEntry(selection,entry) {
+  const matchesItem=selection.items.some(id => entry.managementId===id || entry.items?.includes(id));
+  return matchesItem && (!entry.claims?.length || entry.claims.some(claim => claim.cli===null || claim.cli===selection.client));
+}
 draft.choices = { instructions: false, superpowers: false, extensions: false, ...draft.choices };
 const requestUnit = request => request.schema.includes('change-request') ? 'instructions' : request.contents?.some(content => content.framework.id === 'extensions') ? 'extensions' : 'superpowers';
 const instructionsRequest = () => ({ schema: 'urn:aihq:core:change-request:0.1.0', mode, scope: 'project', target, changes: [{ managementId: 'project-instructions', change, inputs: { text: draft.text }, requires: [] }] });
@@ -176,9 +190,13 @@ async function installedPolicyChecks(installed) {
   if (mode !== 'enterprise' || !organization) return [];
   const units = new Map();
   for (const group of installedGroups(installed,requests,catalogSelections)) {
-    const selection = Object.values(catalogSelections).find(selection => group.entries.some(entry => selection.items.some(id => entry.items?.includes(id) || entry.managementId === id)));
-    const unit = group.wholePlugin ? group.framework : selection?.key || (group.id === 'project-instructions'?'instructions':group.id);
-    if (!units.has(unit)) units.set(unit,{unit,label:group.wholePlugin?group.label:selection?selection.items.join(', ')+' · '+selection.client:group.id === 'project-instructions'?'Project instructions':group.label,removalId:group.id});
+    const tracked = group.wholePlugin ? [] : Object.values(catalogSelections).filter(selection => group.entries.some(entry => selectionOwnsEntry(selection,entry)));
+    if (tracked.length) {
+      for (const selection of tracked) if (!units.has(selection.key)) units.set(selection.key,{unit:selection.key,label:selection.items.join(', ')+' · '+selection.client,removalId:group.id});
+    } else {
+      const unit = group.wholePlugin ? group.framework : group.id==='project-instructions'?'instructions':group.id;
+      if (!units.has(unit)) units.set(unit,{unit,label:unit==='instructions'?'Project instructions':group.label,removalId:group.id});
+    }
   }
   return Promise.all([...units.values()].map(async row => {
     const request = catalogSelections[row.unit] ? currentCatalogPolicyRequest(row.unit,installed) : requests[row.unit];
@@ -190,7 +208,7 @@ async function installedPolicyChecks(installed) {
 function currentCatalogPolicyRequest(key, installed) {
   const saved = requests[key], selection = catalogSelections[key];
   if (!saved || !selection) return saved;
-  const managed = new Set(installed.entries.flatMap(entry => [entry.managementId,...(entry.items || [])]));
+  const managed = new Set(installed.entries.filter(entry => selectionOwnsEntry(selection,entry)).flatMap(entry => [entry.managementId,...(entry.items || [])]));
   const remaining = selection.items.filter(id => managed.has(id));
   if (remaining.length === selection.items.length) return saved;
   if (!remaining.length) return null;
@@ -200,7 +218,11 @@ function currentCatalogPolicyRequest(key, installed) {
   return {...saved,plan,files:saved.files.filter(ref => needed.has(ref.sha256))};
 }
 function invalidate() { review = null; generation++; }
-async function persist() { await writeFile(join(root, 'intent.json'), JSON.stringify({ draft, lastRequest, requests, catalogSelections }, (key, value) => key === 'bytes' ? undefined : value, 2)); }
+async function persist() {
+  const path=join(root,'intent.json');
+  await writeFile(path+'.tmp',JSON.stringify({draft,lastRequest,requests,catalogSelections,pendingCatalogApply},(key,value) => key==='bytes'?undefined:value,2));
+  await rename(path+'.tmp',path);
+}
 function remember(kind, result, extra = {}) {
   const input = { kind, result: clean(result), ...extra };
   const guidance = contracts.getGuidance(input, { platform: process.platform });
@@ -342,19 +364,28 @@ async function dispatch(action, body) {
     if (!selected || selected.id !== body.id || selected.context !== body.context || selected.result.review?.reviewDigest !== body.reviewDigest || hash({ draft, organization, generation }) !== selected.context) throw Object.assign(Error('Review changed or was already used. Prepare again.'), { code: 'REVIEW_STALE' });
     if (!selected.applyAllowed) throw Object.assign(Error('No applicable project-file handle in this review'), { code: 'APPLY_UNAVAILABLE' });
     review = null; generation++;
+    if (selected.catalogSelection) {
+      pendingCatalogApply={selection:selected.catalogSelection,request:selected.request};
+      await persist();
+    }
     const result = await core.apply(selected.result.handle, { approved: true, origin: 'interactive', reviewDigest: body.reviewDigest }, controls(selected.request));
-    if (selected.request && result.completion === 'complete') {
+    const retainedPartial = selected.catalogSelection && ['incomplete','cancelled'].includes(result.completion) &&
+      (await inventory()).entries.some(entry => selectionOwnsEntry(selected.catalogSelection,entry));
+    if (selected.request && (result.completion === 'complete' || retainedPartial)) {
       lastRequest = selected.request;
       const key=selected.catalogSelection?.key || requestUnit(selected.request);
       if (selected.catalogSelection) catalogSelections[key]=selected.catalogSelection;
       requests[key] = selected.request;
+    }
+    if (selected.catalogSelection || selected.request && result.completion === 'complete') {
+      pendingCatalogApply=null;
       await persist();
     }
     if (selected.operation === 'remove' && result.completion === 'complete') {
       const remaining = await inventory();
       const stillPresent = selected.removedUnit === 'instructions' ? remaining.entries.some(entry => entry.managementId === 'project-instructions') : installedGroups(remaining,requests,catalogSelections).some(group => group.wholePlugin && group.framework === selected.removedUnit);
       for (const [key, selection] of Object.entries(catalogSelections)) {
-        if (!remaining.entries.some(entry=>selection.items.some(id=>entry.items?.includes(id)||entry.managementId===id))) {
+        if (!remaining.entries.some(entry => selectionOwnsEntry(selection,entry))) {
           delete requests[key];delete catalogSelections[key];
         }
       }
@@ -445,7 +476,7 @@ async function dispatch(action, body) {
     }
     const result = checks.at(-1) || { check: { status: 'refused', reason: 'No completed request retained in this workspace.' }, admission: null };
     return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.entries(requests).some(([key,request]) => {
-      if (catalogSelections[key]) return catalogSelections[key].items.some(id => entry.managementId===id || entry.items?.includes(id));
+      if (catalogSelections[key]) return selectionOwnsEntry(catalogSelections[key],entry);
       return request.changes?.some(change => change.managementId===entry.managementId) || request.plan && (entry.framework===key || entry.items?.some(item => item.startsWith(key+'.')));
     })).map(entry => entry.managementId) } };
   }

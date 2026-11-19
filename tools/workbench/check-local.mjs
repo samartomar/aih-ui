@@ -90,6 +90,7 @@ try {
     await draft('vibe', 'Updated instructions.', true);
     prepared = await post('prepare', { mode: 'vibe' });
     assert.ok(prepared.prepared, JSON.stringify(prepared.outcome));
+    assert.ok(prepared.prepared.result.review.origin?.recipe?.sha256, JSON.stringify(prepared.prepared.result.review.originNote));
     checks.push(`whole-plugin Core result: ${prepared.prepared.result.status}; apply available: ${prepared.prepared.applyAllowed}`);
     await writeFile(join(workspace, 'superpowers-prepare.json'), JSON.stringify(prepared, null, 2));
     assert.equal(prepared.prepared.applyAllowed, true, JSON.stringify(prepared.prepared.result));
