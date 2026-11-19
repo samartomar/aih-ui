@@ -1,2 +1,4 @@
 tools/consumer/fixtures/** -text
 tools/report/fixtures/** -text
+tools/workbench/local-*-recipe.json text eol=lf
+tools/workbench/local-*-plugin.json text eol=lf

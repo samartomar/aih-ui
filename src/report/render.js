@@ -303,20 +303,26 @@ function readOptions(options) {
   return { title, demo: mode === 'demo' };
 }
 
+function titledShell(title) {
+  const html = replaceOnce(TEMPLATE, TITLE_ANCHOR, `<title>${esc(title)}</title>`);
+  return replaceOnce(html, BRAND_ANCHOR, `<span id="brand-title">${esc(title)}</span>`);
+}
+
+/** The original illustrative dashboard can be opened before a diagnostic has been collected. */
+export function renderDesignSample(title = DEFAULT_TITLE) {
+  let html = titledShell(title);
+  html = replaceOnce(html, '<body>', '<body data-demo="on">');
+  html = replaceOnce(html, BANNER_ANCHOR, DEMO_BANNER);
+  return replaceOnce(html, RADAR_ANCHOR, `window.AIH_DATA=${scriptJson({ mode: 'demo', sections: {} })};\n${RADAR_ANCHOR}`);
+}
+
 function render({ importSnapshot, exportSnapshot }, input, options) {
   const { title, demo } = readOptions(options);
-  // The data module validates, bounds and re-applies the privacy projection; the page draws only that copy.
+  // Keep the existing report entry point's validation contract in both modes.
   const snapshot = importSnapshot(exportSnapshot(input));
+  if (demo) return renderDesignSample(title);
   const sections = {};
-  let html = TEMPLATE;
-  html = replaceOnce(html, TITLE_ANCHOR, `<title>${esc(title)}</title>`);
-  html = replaceOnce(html, BRAND_ANCHOR, `<span id="brand-title">${esc(title)}</span>`);
-  if (demo) {
-    // The authored shell is the design sample: its baked values are shown, labelled, and nothing is bound.
-    html = replaceOnce(html, '<body>', '<body data-demo="on">');
-    html = replaceOnce(html, BANNER_ANCHOR, DEMO_BANNER);
-    return replaceOnce(html, RADAR_ANCHOR, `window.AIH_DATA=${scriptJson({ mode: 'demo', sections })};\n${RADAR_ANCHOR}`);
-  }
+  let html = titledShell(title);
   for (const [id, [no, panelTitle, insight, cardTitle, reason]] of Object.entries(EMPTY_PANELS)) {
     sections[id] = { state: 'empty', html: emptyPanel(no, panelTitle, insight, cardTitle, reason) };
   }

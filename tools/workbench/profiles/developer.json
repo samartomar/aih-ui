@@ -1,0 +1,141 @@
+{
+  "source": {
+    "repository": "https://github.com/samartomar/aih-ui",
+    "commit": "208388c096122f834560b03cbe3aea6127fba6a7"
+  },
+  "format": "workbench-profile/1",
+  "role": "Developer",
+  "title": "Implementation & verification",
+  "outcome": "Take the reviewed onboarding brief through a working change, tests and code review with the complete Superpowers plugin.",
+  "firstTask": "Read the accepted brief. Use the Superpowers planning workflow to turn its failure and recovery examples into the first test.",
+  "plugin": {
+    "name": "workbench-superpowers-local-example",
+    "version": "1.0.0",
+    "description": "Workbench-authored example selecting Catalog's local-plugin route for pinned Superpowers. Not an upstream Superpowers recipe.",
+    "author": "Workbench example",
+    "license": "Apache-2.0",
+    "keywords": [
+      "example",
+      "local-plugin"
+    ]
+  },
+  "recipe": {
+    "schema": "urn:aihq:catalog:recipe:0.1.0",
+    "id": "workbench-superpowers-local-example",
+    "kind": "base",
+    "framework": "superpowers",
+    "content": {
+      "repository": "https://github.com/obra/superpowers",
+      "commit": "5bf4e78011075bcfc0dc295f0724994cd123ee71"
+    },
+    "routes": {
+      "claude-code": "local-plugin"
+    },
+    "plugins": {
+      "claude-code": {
+        "source": "superpowers",
+        "path": "/",
+        "plugin": "superpowers",
+        "commit": "5bf4e78011075bcfc0dc295f0724994cd123ee71",
+        "marketplace": "superpowers"
+      }
+    },
+    "members": [
+      {
+        "item": "superpowers.rule.session-bootstrap",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.brainstorming",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.diagnosing-superpowers",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.dispatching-parallel-agents",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.executing-plans",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.finishing-a-development-branch",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.receiving-code-review",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.requesting-code-review",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.subagent-driven-development",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.systematic-debugging",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.test-driven-development",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.using-git-worktrees",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.using-superpowers",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.verification-before-completion",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.writing-plans",
+        "preTicked": true
+      },
+      {
+        "item": "superpowers.skill.writing-skills",
+        "preTicked": true
+      }
+    ],
+    "options": [
+      {
+        "id": "hooks",
+        "pick": "several",
+        "items": [
+          {
+            "item": "superpowers.hook.session-start",
+            "preTicked": false
+          }
+        ]
+      }
+    ],
+    "data": {
+      "repository": "https://github.com/samartomar/aih-catalog",
+      "commit": "7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26"
+    }
+  },
+  "choices": {
+    "hooks": [
+      "superpowers.hook.session-start"
+    ]
+  },
+  "files": [
+    {
+      "path": "CLAUDE.md",
+      "text": "# Development workspace\n\nRead the approved feature brief and ai-coding/handoff.md before implementation. Carry each acceptance example into a test. Record commands, observed results and any unverified behavior.\n"
+    },
+    {
+      "path": "ai-coding/handoff.md",
+      "text": "# Implementation handoff\n\n- Reviewed brief and interaction design:\n- First failing test:\n- Implementation and verification evidence:\n- Remaining decisions:\n"
+    }
+  ]
+}
