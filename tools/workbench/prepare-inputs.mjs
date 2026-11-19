@@ -9,7 +9,10 @@ if (!consumer || !catalogDirectory) {
 const root = resolve(catalogDirectory);
 const { data } = JSON.parse(await readFile(join(consumer, 'public', 'catalog.json'), 'utf8'));
 const { repository, commit } = data;
-const recipe = JSON.parse(await readFile(join(root, 'port-report', 'ai-setup.json'), 'utf8'));
+const report = JSON.parse(await readFile(join(root, 'port-report', 'ai-setup.json'), 'utf8'));
+const combination = report.recipes.find(entry => entry.id === 'code-intelligence-trio');
+if (!combination) throw Error('The published Catalog report has no code-intelligence-trio recipe.');
+const recipe = { ...combination, data: { repository, commit } };
 const qualifications = {};
 for (const name of await readdir(join(root, 'data', 'qualifications'))) {
   if (!/^[0-9a-f]{64}\.json$/.test(name)) continue;
