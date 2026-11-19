@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { loadPublic } from './local-packages.mjs';
 import { createReportRenderer } from '../../src/report/render.js';
 import { createExtensionsInstaller } from './local-extensions.mjs';
+import { explainFileCheck } from './file-check-explanation.mjs';
 import { developerConsole, enableReportKeyboard } from './developer-console.mjs';
 
 const [consumer, root, mode] = process.argv.slice(2);
@@ -377,7 +378,7 @@ async function dispatch(action, body) {
       const checkControls = request.schema === 'urn:aihq:core:plan-request:0.1.0' ? { catalog: controls(request).catalog } : {};
       const result = await core.checkFiles(request, checkControls);
       const admission = await currentAdmission(saved, installed);
-      checks.push({ unit, check: result, admission });
+      checks.push({ unit, check: result, admission, explanation:explainFileCheck(unit, saved, result, installed) });
     }
     const result = checks.at(-1) || { check: { status: 'refused', reason: 'No completed request retained in this workspace.' }, admission: null };
     return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.values(requests).some(request => request.changes?.some(change => change.managementId === entry.managementId) || request.plan && (entry.framework === requestUnit(request) || entry.items?.some(item => item.startsWith(requestUnit(request) + '.'))))).map(entry => entry.managementId) } };
