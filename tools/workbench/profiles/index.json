@@ -1,0 +1,7 @@
+{
+  "profiles": [
+    "analyst.json",
+    "developer.json"
+  ],
+  "contributorExample": "interaction-design.json"
+}

@@ -36,7 +36,8 @@
   "scripts": {
     "check:workbench": "node tools/check-workbench.mjs",
     "build:css": "node tools/build-css.mjs",
-    "preview": "node tools/preview.mjs"
+    "preview": "node tools/preview.mjs",
+    "preview:workbench": "node tools/workbench/local-server.mjs"
   },
   "peerDependencies": {
     "@aihq/catalog": "0.1.0",

@@ -1,0 +1,110 @@
+{
+  "source": {
+    "repository": "https://github.com/samartomar/aih-ui",
+    "commit": "a81576c5de2c4a13bcc6139701fc304e0843c521"
+  },
+  "format": "workbench-profile/1",
+  "role": "System analyst / product owner",
+  "title": "Requirements & design review",
+  "outcome": "Turn an onboarding request into a brief that a developer can implement and a product owner can accept.",
+  "firstTask": "Draft the onboarding brief from ai-coding/brief.md. Ask about the first failed sign-in, then review the draft for missing decisions.",
+  "plugin": {
+    "name": "analyst-design-review",
+    "version": "0.1.0",
+    "description": "Turn an onboarding request into a brief that a developer can implement and a product owner can accept.",
+    "author": "Workbench examples",
+    "license": "Apache-2.0",
+    "keywords": [
+      "persona",
+      "prototype"
+    ]
+  },
+  "recipe": {
+    "schema": "urn:aihq:catalog:recipe:0.1.0",
+    "id": "analyst-design-review",
+    "kind": "combination",
+    "frameworks": [
+      "egm",
+      "guide"
+    ],
+    "content": {
+      "egm": {
+        "repository": "https://github.com/google/elephant-goldfish-model",
+        "commit": "403d8881d62022490637d740657b33f01e321ea8"
+      },
+      "guide": {
+        "repository": "https://github.com/samartomar/aih-extensions",
+        "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa"
+      }
+    },
+    "routes": {
+      "claude-code": "items",
+      "codex": "items"
+    },
+    "members": [
+      {
+        "item": "guide.agent.aih-guide",
+        "preTicked": true
+      },
+      {
+        "item": "egm.skill.egm-brainstorm",
+        "preTicked": true
+      },
+      {
+        "item": "egm.skill.egm-draft",
+        "preTicked": true
+      },
+      {
+        "item": "egm.skill.egm-review",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.zoom_out",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.comprehension",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.design_critic",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.implementation_readiness",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.synthesizer",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.structural",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.codebase_details",
+        "preTicked": true
+      },
+      {
+        "item": "egm.agent.style",
+        "preTicked": true
+      }
+    ],
+    "data": {
+      "repository": "https://github.com/samartomar/aih-catalog",
+      "commit": "7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26"
+    }
+  },
+  "choices": {},
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "text": "# Analyst workspace\n\nFor a new feature, use ai-coding/brief.md to capture requirements. Write an observable acceptance example and record open decisions. Hand the reviewed brief to design and development.\n"
+    },
+    {
+      "path": "ai-coding/brief.md",
+      "text": "# Feature brief\n\n## User and job\nWho needs this change, and what are they trying to do?\n\n## Acceptance examples\nDescribe a success, a failure and recovery.\n\n## Open decisions\nRecord the owner and the trade-off.\n\n## Handoff\nLink the reviewed design and name its next owner.\n"
+    }
+  ]
+}

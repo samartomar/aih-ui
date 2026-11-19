@@ -1,0 +1,8 @@
+{
+  "name": "workbench-superpowers-local-example",
+  "version": "1.0.0",
+  "description": "Workbench-authored example selecting Catalog's local-plugin route for pinned Superpowers. Not an upstream Superpowers recipe.",
+  "author": "Workbench example",
+  "license": "Apache-2.0",
+  "keywords": ["example", "local-plugin"]
+}

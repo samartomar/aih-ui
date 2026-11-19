@@ -25,6 +25,19 @@ The Policy Workbench user interface for AIH, built as an independent application
 - The V9 report presentation (`src/report/`): a validated `@aihq/core/report` snapshot drawn as one offline HTML page, in report mode or as the labelled design sample. This presentation moved here from `@aihq/core`'s `./report/render` export; Core keeps the snapshot data, validation, redaction, claims and calculations, and the renderer reads them only through `@aihq/core/report`. The report page and the offline `tools/render-report.mjs` use the same renderer. See [report](docs/report.md#saved-snapshot-report-v9).
 - Guided personal setup (`src/guided.html`): a goal sentence, an optional project folder inspected only in the browser and the chosen AI clients become explained starter choices from the served Catalog, a copyable prompt and a saved unresolved-draft envelope. The rules are fixed and local (`src/app/guided-rules.js`); no folder content, model call or upload is involved. A chosen client is served by the adapter whose Catalog `clientId` names it, and the choice states that adapter's target, Core support and installed state separately.
 
+## Run the local Workbench preview
+
+The preview opens Catalog, Scan, organization policy and installed software in one local browser window. Use a disposable workspace for installation. The host reads the installed public Core, Catalog and Scan packages from the consumer directory and stores Enterprise and Vibe state separately.
+
+The consumer supplies `public/catalog.json`, `public/provenance.json`, and its indexed Scan files under `public/scan/`. For the tool selection screen, unpack the Catalog data revision named by `public/catalog.json` and run the following from this checkout. A previously prepared consumer already contains `public/workbench/tool-setup-data.json`.
+
+```sh
+node tools/workbench/prepare-inputs.mjs /path/to/consumer /path/to/unpacked-catalog
+npm run preview:workbench -- --consumer /path/to/consumer --workspace /path/to/disposable-workspace --port 0
+```
+
+Open the loopback address printed by the host. A consumer can supply `public/workbench/comparison.json` for the optional recorded release comparison. Native plugin checks require the Core build that exports `observeClaudePlugins` from `@aihq/core/harness/runtime`.
+
 ## What it must never contain
 
 - Policy rules, validation, digests or compile logic. Those belong to `@aihq/core`.

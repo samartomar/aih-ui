@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Full Catalog · Enterprise & Vibe Workbench</title>
+  <link rel="stylesheet" href="../prototype/screens/tokens.css">
+  <link rel="stylesheet" href="workbench.css">
+  <script defer src="workbench.js"></script>
+  <script defer src="layout.js"></script>
+</head>
+<body aria-busy="true">
+  <header class="topbar">
+    <div class="brand"><b>aih</b><span>POLICY WORKBENCH</span><span class="badge amber">LOCAL FUNCTIONAL PROTOTYPE</span></div>
+    <div class="top-actions">
+      <div class="segmented" role="group" aria-label="Workbench mode"><button disabled data-startup-disabled data-mode="enterprise">Enterprise</button><button disabled data-startup-disabled data-mode="vibe">Vibe</button></div><div id="role-switch" class="segmented" role="group" aria-label="Enterprise role"><button disabled data-startup-disabled data-role="admin">Admin</button><button disabled data-startup-disabled data-role="developer">Developer</button></div>
+      <button disabled data-startup-disabled id="theme" aria-label="Switch to light theme">Light</button><label class="scrollbar-preference" for="scrollbar-width">Scrollbars <select id="scrollbar-width"><option value="slim">Slim</option><option value="standard">Standard</option></select></label><button type="button" id="layout-reset" title="Reset pane widths, content heights and scrollbar width">Reset layout</button><button disabled data-startup-disabled id="reset">Refresh actual state</button>
+    </div>
+  </header>
+  <div class="provenance"><span class="dot"></span><b>Full Catalog</b><span id="catalog-source-count" class="badge">Loading Catalog sources…</span><span class="separator">/</span><code title="7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26">7c525bd7d8b6</code><span class="push mono">PINNED CATALOG · ON-DEMAND SCAN EVIDENCE · CONNECTED CORE EXAMPLES</span></div>
+  <div class="workspace">
+    <aside class="rail" id="navigation-pane">
+      <div class="eyebrow">Workbench</div>
+      <nav aria-label="Workbench jobs">
+        <button disabled data-startup-disabled data-view="catalog"><span>▦</span> Catalog <small>CHOICES</small></button>
+        <button disabled data-startup-disabled data-view="tools"><span>⚒</span> Tools <small>CHOOSE / CONFIGURE</small></button>
+        <button disabled data-startup-disabled data-view="profiles"><span>◫</span> Profiles <small>CREATE / IMPORT / PREVIEW</small></button>
+        <button disabled data-startup-disabled data-view="scan"><span>⌕</span> Scan evidence <small id="finding-count"></small></button>
+        <button disabled data-startup-disabled data-view="policy"><span>◇</span> Policy <small id="policy-state"></small></button>
+        <button disabled data-startup-disabled data-view="installed"><span>☷</span> Installed & configure</button>
+        <button disabled data-startup-disabled data-view="reports"><span>≡</span> Reports</button>
+        <button disabled data-startup-disabled data-view="core"><span>⌘</span> Core tools</button>
+        <button disabled data-startup-disabled data-view="repair"><span>⌁</span> Environment & repair</button>
+        <button disabled data-startup-disabled data-view="update" class="compact-update"><span>↻</span> Superpowers update</button>
+      </nav>
+      <div class="rail-divider"></div><div class="eyebrow">Framework sources</div>
+      <div id="source-rail"></div>
+      <div class="rail-note" id="context-note"></div><button disabled data-startup-disabled class="secondary-update" data-view="update">↻ Recorded Superpowers update</button>
+      <div class="rail-bottom" id="connection-state"><span class="dot"></span> Connecting local host…</div>
+    </aside>
+    <div class="pane-divider" id="navigation-divider" role="separator" tabindex="0" aria-label="Navigation width" aria-orientation="vertical" aria-controls="navigation-pane" aria-valuemin="140" aria-valuemax="360" aria-valuenow="200" title="Drag to resize navigation. Arrow keys adjust width; Home and End select limits."></div>
+    <main id="work-pane">
+      <div id="ledger" class="ledger" aria-label="Catalog content kinds"></div>
+      <div id="journey" class="journey" aria-label="Journey progress"></div>
+      <div id="page-head" class="page-head"><div><div id="breadcrumb" class="eyebrow"></div><h1 id="page-title" tabindex="-1"></h1></div><span id="scope-chip" class="badge"></span></div>
+      <div id="notice" class="notice" role="status" aria-live="polite">Loading Catalog and local workspace…</div>
+      <div id="main-content" class="content"></div>
+    </main>
+    <div class="pane-divider" id="inspector-divider" role="separator" tabindex="0" aria-label="Inspector width" aria-orientation="vertical" aria-controls="selection-pane" aria-valuemin="220" aria-valuemax="560" aria-valuenow="280" title="Drag to resize inspector. Arrow keys adjust width; Home and End select limits."></div>
+    <aside class="inspector" id="selection-pane" aria-label="Selection inspector">
+      <div id="inspector-tabs" class="inspector-tabs" role="tablist" aria-label="Inspector"><button id="inspector-tab-details" aria-controls="inspector-content" disabled data-startup-disabled data-inspect="details" role="tab">Details</button><button id="inspector-tab-security" aria-controls="inspector-content" disabled data-startup-disabled data-inspect="security" role="tab">Security</button><button id="inspector-tab-policy" aria-controls="inspector-content" disabled data-startup-disabled data-inspect="policy" role="tab">Policy</button></div>
+      <div id="inspector-content"></div>
+    </aside>
+  </div>
+  <div id="layout-announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <footer><span id="footer-state"></span><span>Real local file operations · saved policy & Core custody · recorded Scan evidence</span></footer>
+</body>
+</html>

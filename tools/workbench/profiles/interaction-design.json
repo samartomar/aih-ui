@@ -1,0 +1,70 @@
+{
+  "source": {
+    "repository": "https://github.com/samartomar/aih-ui",
+    "commit": "a81576c5de2c4a13bcc6139701fc304e0843c521"
+  },
+  "format": "workbench-profile/1",
+  "role": "UI/UX expert",
+  "title": "Interaction design & critique",
+  "outcome": "Prototype the first-run flow and hand developers an interaction decision backed by observed behavior.",
+  "firstTask": "Prototype the failed sign-in state. Ask one person to recover, then record where they hesitate using the observation sheet.",
+  "plugin": {
+    "name": "interaction-design",
+    "version": "0.1.0",
+    "description": "Prototype the first-run flow and hand developers an interaction decision backed by observed behavior.",
+    "author": "Workbench examples",
+    "license": "Apache-2.0",
+    "keywords": [
+      "persona",
+      "prototype"
+    ]
+  },
+  "recipe": {
+    "schema": "urn:aihq:catalog:recipe:0.1.0",
+    "id": "interaction-design",
+    "kind": "combination",
+    "content": {
+      "extensions": {
+        "repository": "https://github.com/samartomar/aih-extensions",
+        "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa"
+      },
+      "guide": {
+        "repository": "https://github.com/samartomar/aih-extensions",
+        "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa"
+      }
+    },
+    "routes": {
+      "claude-code": "items",
+      "codex": "items"
+    },
+    "members": [
+      {
+        "item": "extensions.skill.engineering.prototype",
+        "preTicked": true
+      },
+      {
+        "item": "extensions.skill.frontend-ui-engineering",
+        "preTicked": true
+      },
+      {
+        "item": "guide.agent.aih-guide",
+        "preTicked": true
+      }
+    ],
+    "data": {
+      "repository": "https://github.com/samartomar/aih-catalog",
+      "commit": "7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26"
+    },
+    "frameworks": [
+      "extensions",
+      "guide"
+    ]
+  },
+  "choices": {},
+  "files": [
+    {
+      "path": "ai-coding/observation.md",
+      "text": "# Interaction observation\n\nTask given:\nExpected action:\nObserved action:\nRecovery path:\nDesign change to try:\nAcceptance example for development:\n"
+    }
+  ]
+}
