@@ -1,6 +1,6 @@
 {
   "schema": "urn:aihq:catalog:recipe:0.1.0",
-  "id": "workbench-extensions-local-example",
+  "id": "workbench-extensions-native-example",
   "kind": "base",
   "framework": "extensions",
   "content": {
@@ -8,15 +8,14 @@
     "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa"
   },
   "routes": {
-    "claude-code": "local-plugin"
+    "claude-code": "plugin"
   },
   "plugins": {
     "claude-code": {
       "source": "extensions",
       "path": "/",
       "plugin": "aih-extensions",
-      "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa",
-      "marketplace": "aih-extensions"
+      "commit": "2481164a51ea7f9e480d51ef52f3d5cf15b017fa"
     }
   },
   "members": [
