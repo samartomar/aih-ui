@@ -152,7 +152,7 @@ function provenanceCard(m) {
   const rows = [
     ['Producer', `${producer.name} ${producer.version}`],
     ['Producer revision', producer.revision ?? 'unavailable'],
-    ['Diagnostic contract', producer.contract],
+    [producer.contract ? 'Diagnostic contract' : 'Report format', producer.contract ?? m.snapshot.schema],
     ['Observed at', capture.observedAt],
     ['Capture', CAPTURE_NOTE[capture.acquisition] ?? CAPTURE_NOTE.supplied],
     ['Original evidence SHA-256', sha],
@@ -257,7 +257,7 @@ function supportTicket(m) {
   const diagnostics = snapshot.diagnostics.map((d) => `- ${d.code} (${d.reason}): ${d.message}`);
   return [
     `Subject: Diagnostic findings — ${m.failed.length} failed, ${m.unavailable.length} unavailable, ${m.skipped.length} skipped`,
-    `Source: ${snapshot.producer.name} ${snapshot.producer.version} (${snapshot.producer.revision ?? 'unavailable'}) · contract ${snapshot.producer.contract}`,
+    `Source: ${snapshot.producer.name} ${snapshot.producer.version} (${snapshot.producer.revision ?? 'unavailable'}) · format ${snapshot.producer.contract ?? snapshot.schema}`,
     `Captured: ${snapshot.capture.observedAt} (${m.acquisition})`,
     `Status: ${snapshot.status}`,
     '',

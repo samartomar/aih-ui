@@ -10,6 +10,7 @@
   <script defer src="layout.js"></script>
 </head>
 <body aria-busy="true">
+  <a class="skip-link" href="#main-content">Skip to page content</a>
   <header class="topbar">
     <div class="brand"><b>aih</b><span>POLICY WORKBENCH</span><span class="badge amber">LOCAL FUNCTIONAL PROTOTYPE</span></div>
     <div class="top-actions">
@@ -17,25 +18,28 @@
       <button disabled data-startup-disabled id="theme" aria-label="Switch to light theme">Light</button><label class="scrollbar-preference" for="scrollbar-width">Scrollbars <select id="scrollbar-width"><option value="slim">Slim</option><option value="standard">Standard</option></select></label><button type="button" id="layout-reset" title="Reset pane widths, content heights and scrollbar width">Reset layout</button><button disabled data-startup-disabled id="reset">Refresh actual state</button>
     </div>
   </header>
-  <div class="provenance"><span class="dot"></span><b>Full Catalog</b><span id="catalog-source-count" class="badge">Loading Catalog sources…</span><span class="separator">/</span><code title="7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26">7c525bd7d8b6</code><span class="push mono">PINNED CATALOG · ON-DEMAND SCAN EVIDENCE · CONNECTED CORE EXAMPLES</span></div>
+  <div class="provenance"><span class="dot"></span><b>Full Catalog</b><span id="catalog-source-count" class="badge">Loading Catalog sources…</span><span class="separator">/</span><code title="7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26">7c525bd7d8b6</code><button class="push" disabled data-startup-disabled data-view="core" aria-label="Core tools and public interfaces">Public interfaces</button></div>
   <div class="workspace">
     <aside class="rail" id="navigation-pane">
       <div class="eyebrow">Workbench</div>
-      <nav aria-label="Workbench jobs">
-        <button disabled data-startup-disabled data-view="catalog"><span>▦</span> Catalog <small>CHOICES</small></button>
-        <button disabled data-startup-disabled data-view="tools"><span>⚒</span> Tools <small>CHOOSE / CONFIGURE</small></button>
-        <button disabled data-startup-disabled data-view="profiles"><span>◫</span> Profiles <small>CREATE / IMPORT / PREVIEW</small></button>
-        <button disabled data-startup-disabled data-view="scan"><span>⌕</span> Scan evidence <small id="finding-count"></small></button>
-        <button disabled data-startup-disabled data-view="policy"><span>◇</span> Policy <small id="policy-state"></small></button>
-        <button disabled data-startup-disabled data-view="installed"><span>☷</span> Installed & configure</button>
-        <button disabled data-startup-disabled data-view="reports"><span>≡</span> Reports</button>
-        <button disabled data-startup-disabled data-view="core"><span>⌘</span> Core tools</button>
-        <button disabled data-startup-disabled data-view="repair"><span>⌁</span> Environment & repair</button>
-        <button disabled data-startup-disabled data-view="update" class="compact-update"><span>↻</span> Superpowers update</button>
+      <nav aria-label="Workbench jobs" class="job-nav">
+        <button disabled data-startup-disabled data-job="choose" data-view="catalog">Choose a setup</button>
+        <button disabled data-startup-disabled data-job="workspace" data-view="installed">Workspace</button>
+        <button disabled data-startup-disabled data-job="policy" data-view="policy">Policy <small id="policy-state"></small></button>
+        <button disabled data-startup-disabled data-job="diagnostics" data-view="reports">Diagnostics</button>
       </nav>
-      <div class="rail-divider"></div><div class="eyebrow">Framework sources</div>
+      <nav aria-label="Pages in this job" class="job-pages">
+        <button disabled data-startup-disabled data-section="choose" data-view="catalog">Catalog</button>
+        <button disabled data-startup-disabled data-section="choose" data-view="tools">Configure tools</button>
+        <button disabled data-startup-disabled data-section="choose" data-view="profiles">Profiles</button>
+        <button disabled data-startup-disabled data-section="choose" data-view="scan">Scan evidence <small id="finding-count"></small></button>
+        <button disabled data-startup-disabled data-section="workspace" data-view="installed">Installed &amp; configure</button>
+        <button disabled data-startup-disabled data-section="diagnostics" data-view="reports">Reports</button>
+        <button disabled data-startup-disabled data-section="diagnostics" data-view="repair">Environment &amp; repair</button>
+      </nav>
+      <div class="rail-divider"></div><div id="framework-heading" class="eyebrow">Framework sources</div>
       <div id="source-rail"></div>
-      <div class="rail-note" id="context-note"></div><button disabled data-startup-disabled class="secondary-update" data-view="update">↻ Recorded Superpowers update</button>
+      <div class="rail-note" id="context-note"></div>
       <div class="rail-bottom" id="connection-state"><span class="dot"></span> Connecting local host…</div>
     </aside>
     <div class="pane-divider" id="navigation-divider" role="separator" tabindex="0" aria-label="Navigation width" aria-orientation="vertical" aria-controls="navigation-pane" aria-valuemin="140" aria-valuemax="360" aria-valuenow="200" title="Drag to resize navigation. Arrow keys adjust width; Home and End select limits."></div>
@@ -44,7 +48,7 @@
       <div id="journey" class="journey" aria-label="Journey progress"></div>
       <div id="page-head" class="page-head"><div><div id="breadcrumb" class="eyebrow"></div><h1 id="page-title" tabindex="-1"></h1></div><span id="scope-chip" class="badge"></span></div>
       <div id="notice" class="notice" role="status" aria-live="polite">Loading Catalog and local workspace…</div>
-      <div id="main-content" class="content"></div>
+      <div id="main-content" class="content" tabindex="-1"></div>
     </main>
     <div class="pane-divider" id="inspector-divider" role="separator" tabindex="0" aria-label="Inspector width" aria-orientation="vertical" aria-controls="selection-pane" aria-valuemin="220" aria-valuemax="560" aria-valuenow="280" title="Drag to resize inspector. Arrow keys adjust width; Home and End select limits."></div>
     <aside class="inspector" id="selection-pane" aria-label="Selection inspector">
