@@ -78,7 +78,7 @@ function startWorker({ consumer, workspace, mode, sourceCache, recipeCommit }) {
   })();
 }
 
-export async function createPrototypeServer({ consumer, workspace, port = 0, sourceCache, recipeCommit } = {}) {
+export async function createPrototypeServer({ consumer, workspace, port = 0, sourceCache, recipeCommit = 'baec1884f1d7aa5262535a16d447c1094c258a07' } = {}) {
   if (!consumer || !workspace) throw Error('--consumer and --workspace are required');
   consumer = resolve(consumer); workspace = resolve(workspace);
   if (sourceCache) sourceCache = resolve(sourceCache);
@@ -89,7 +89,7 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
   const screen = join(here, '..', '..', 'src', 'workbench');
   const assets = new Map(['index.html', 'workbench.js', 'layout.js'].map(name => [`/${name}`, join(screen, name)]));
   assets.set('/workbench.css', join(screen, '..', 'styles', 'reviewed-workbench.css'));
-  assets.set('/prototype/screens/tokens.css', join(here, '..', '..', 'prototype', 'screens', 'tokens.css'));
+  assets.set('/tokens.css', join(screen, '..', 'styles', 'tokens.css'));
   const data = JSON.parse(await readFile(join(consumer, 'public', 'provenance.json'), 'utf8'));
   const comparisonFile = join(consumer, 'public', 'workbench', 'comparison.json');
   const comparison = await readFile(comparisonFile, 'utf8').then(JSON.parse).catch(error => {
