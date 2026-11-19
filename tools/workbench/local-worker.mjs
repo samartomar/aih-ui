@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { loadPublic } from './local-packages.mjs';
 import { createReportRenderer } from '../../src/report/render.js';
+import { createExtensionsInstaller } from './local-extensions.mjs';
 import { developerConsole, enableReportKeyboard } from './developer-console.mjs';
 
 const [consumer, root, mode] = process.argv.slice(2);
@@ -55,6 +56,7 @@ const catalogInput = JSON.parse(await readFile(join(consumer, 'public', 'catalog
 const provenance = JSON.parse(await readFile(join(consumer, 'public', 'provenance.json'), 'utf8'));
 const contentText = catalogInput.documents.find(text => JSON.parse(text).framework.id === 'superpowers');
 const parsed = reader.readContent(Buffer.from(contentText));
+const extensionsInstaller = await createExtensionsInstaller({ consumer, root, recipeCommit: process.env.AIH_EXTENSIONS_RECIPE_COMMIT, sourceCache: process.env.AIH_EXTENSIONS_SOURCE_CACHE || undefined });
 if (parsed.status !== 'ok') throw Error('Catalog snapshot rejected');
 const content = parsed.content;
 const snapshot = { framework: content.sources.find(source => source.id === 'superpowers'), catalog: catalogInput.data, packages: provenance.packages };
@@ -74,7 +76,7 @@ const identity = await contracts.deriveChangeIdentity({ change });
 if (identity.status !== 'ok') throw Error(JSON.stringify(identity));
 const target = { project, client: { id: 'claude-code', surface: 'cli' }, repository: 'https://example.invalid/docs-site' };
 let organization = null, generation = 0, review = null, lastRequest = null, requests = {};
-let draft = { choices: { instructions: false, superpowers: false }, text: 'Use the project conventions. Review changes before committing.' };
+let draft = { choices: { instructions: false, superpowers: false, extensions: false }, text: 'Use the project conventions. Review changes before committing.' };
 let history = [], inspection = null, repair = null, sourceResult = null, latestReport = null;
 const reportsDirectory = join(root, 'reports');
 const latestCapturePath = join(reportsDirectory, 'latest.json');
@@ -113,6 +115,8 @@ if (mode === 'enterprise') {
 }
 try { organization = JSON.parse(await readFile(policyPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { const saved = JSON.parse(await readFile(join(root, 'intent.json'), 'utf8')); draft = saved.draft; lastRequest = saved.lastRequest; requests = saved.requests || (lastRequest ? { [lastRequest.schema.includes('change-request') ? 'instructions' : 'superpowers']: lastRequest } : {}); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+draft.choices = { instructions: false, superpowers: false, extensions: false, ...draft.choices };
+const requestUnit = request => request.schema.includes('change-request') ? 'instructions' : request.contents?.some(content => content.framework.id === 'extensions') ? 'extensions' : 'superpowers';
 const instructionsRequest = () => ({ schema: 'urn:aihq:core:change-request:0.1.0', mode, scope: 'project', target, changes: [{ managementId: 'project-instructions', change, inputs: { text: draft.text }, requires: [] }] });
 
 const pluginJson = await readFile(join(here, 'local-superpowers-plugin.json'), 'utf8');
@@ -161,13 +165,14 @@ async function installedPolicyChecks(installed) {
   if (mode !== 'enterprise' || !organization) return [];
   const units = new Map();
   for (const entry of installed.entries || []) {
-    const isPlugin = entry.framework === 'superpowers' || entry.items?.some(id => id.startsWith('superpowers.'));
-    const unit = isPlugin ? 'superpowers' : entry.managementId === 'project-instructions' ? 'instructions' : entry.managementId;
+    const pluginFramework = ['extensions', 'superpowers'].find(framework => entry.framework === framework || entry.items?.some(id => id.startsWith(framework + '.')));
+    const isPlugin = !!pluginFramework;
+    const unit = isPlugin ? pluginFramework : entry.managementId === 'project-instructions' ? 'instructions' : entry.managementId;
     if (!units.has(unit)) {
-      const label = isPlugin ? 'Superpowers' : unit === 'instructions' ? 'Project instructions' : entry.managementId;
+      const label = isPlugin ? pluginFramework === 'extensions' ? 'AIH Extensions' : 'Superpowers' : unit === 'instructions' ? 'Project instructions' : entry.managementId;
       units.set(unit, { unit, label, removalId: null });
     }
-    if (!isPlugin || entry.localPlugin) units.get(unit).removalId = entry.managementId;
+    if (!isPlugin || entry.localPlugin || entry.plugins?.length) units.get(unit).removalId = entry.managementId;
   }
   return Promise.all([...units.values()].map(async row => {
     const result = await currentAdmission(Object.hasOwn(requests, row.unit) ? requests[row.unit] : null, installed);
@@ -190,15 +195,22 @@ async function diagnosticReport() {
 }
 async function state() {
   const installed = await inventory();
-  return { mode, project, home: process.env.USERPROFILE || process.env.HOME, organization, policyDigest: policyDigest(), reviews, generation, draft, inventory: installed, installedPolicyChecks: await installedPolicyChecks(installed), prepared: review ? { id: review.id, context: review.context, result: clean(review.result), operation: review.operation, applyAllowed: review.applyAllowed } : null, history, inspection, repair, report: latestReport, reportDigest: latestReport?.status === 'ok' ? hash(latestReport.snapshot) : null, source: sourceResult ? { status: sourceResult.status, reason: sourceResult.reason, commit: sourceResult.source?.commit } : null };
+  return { mode, connectedFramework: { unit:'extensions', id:'extensions', name:'AIH Extensions', version:'0.6.0', plugin:'aih-extensions' }, extensionsDerivation:extensionsInstaller.derivation(), project, home: process.env.USERPROFILE || process.env.HOME, organization, policyDigest: policyDigest(), reviews, generation, draft, inventory: installed, installedPolicyChecks: await installedPolicyChecks(installed), prepared: review ? { id: review.id, context: review.context, result: clean(review.result), operation: review.operation, applyAllowed: review.applyAllowed, nativePlugin: review.nativePlugin } : null, history, inspection, repair, report: latestReport, reportDigest: latestReport?.status === 'ok' ? hash(latestReport.snapshot) : null, source: sourceResult ? { status: sourceResult.status, reason: sourceResult.reason, commit: sourceResult.source?.commit } : null };
 }
-async function storePrepared(result, operation, request) {
+async function storePrepared(result, operation, request, allowNative = false) {
   const context = hash({ draft, organization, generation });
-  // Executing client programs is outside this project-file example. Core's exact review/refusal stays visible.
+  // Only the connected native Extensions route may approve its reviewed client commands.
   const program = result.review?.steps?.some(step => ['run-program', 'opaque-process'].includes(step.effect) || step.commands?.length);
-  review = { id: randomUUID(), context, result, operation, request, applyAllowed: !!result.handle && !program };
+  review = { id: randomUUID(), context, result, operation, request, applyAllowed: !!result.handle && (!program || allowNative) };
+  const native = request?.plan?.plan?.find(step => step.op === 'plugin' && step.framework === 'extensions');
+  if (native && result.review?.steps?.some(step => step.op === 'plugin' && step.plugin === native.plugin && step.commit === native.commit)) {
+    const content = request.contents.find(content => content.framework.id === native.framework);
+    const plugin = content?.plugins?.find(plugin => plugin.scanKey === native.scanKey);
+    if (plugin) review.nativePlugin = { repository: native.repository, commit: native.commit, scope: request.scope,
+      hooks: content.items.filter(item => item.kind === 'hook' && request.recipeProof?.choices?.hooks?.includes(item.id)).map(item => ({ id:item.id, name:item.name, event:item.event })) };
+  }
   remember('prepare', result);
-  return { ...await state(), containment: program ? 'This review executes a native client program; this example only applies project file operations. Review and apply this program separately in your intended client environment.' : null };
+  return { ...await state(), containment: program ? allowNative ? 'This review runs the exact native Claude plugin commands shown below in the isolated workspace account. Apply is your separate approval.' : 'This review executes a native client program outside the connected Extensions installation. Review it separately in the intended client environment.' : null };
 }
 async function dispatch(action, body) {
   if (action === 'render-v9' || action === 'render-console') {
@@ -235,7 +247,7 @@ async function dispatch(action, body) {
     return { policy, policyNote: 'Saved policy ' + organization.id + ' · admission applies to the planned Catalog steps.' };
   }
   if (action === 'state') return state();
-  if (action === 'draft') { invalidate(); draft = body; await persist(); return state(); }
+  if (action === 'draft') { invalidate(); draft = { ...body, choices: { ...draft.choices, ...body.choices } }; await persist(); return state(); }
   if (action === 'policy' || action === 'policy-preview') {
     const policy = { schema: 'urn:aihq:core:organization:0.1.0', id: body.id, entries: [{ id: 'superpowers-framework', obligation: body.obligation, scopes: ['project'], clients: ['claude-code'], content: { framework: 'superpowers' } }, { id: 'project-instructions', obligation: body.allowCustom ? 'permitted' : 'prohibited', scopes: ['project'], clients: ['claude-code'], change: { identity: identity.changeIdentity }, inputs: { text: { allowDeclared: true } }, lifecycle: { replace: true, adopt: false, remove: true } }], sources: { published: [{ repository: snapshot.catalog.repository, commit: snapshot.catalog.commit }] } };
     for (const [framework, obligation] of Object.entries(body.frameworkRules || {})) {
@@ -251,23 +263,26 @@ async function dispatch(action, body) {
   }
   if (action === 'prepare') {
     invalidate();
-    const selected = body.unit || (draft.choices.superpowers && !draft.choices.instructions ? 'superpowers' : draft.choices.instructions && !draft.choices.superpowers ? 'instructions' : null);
+    const chosen = ['extensions','superpowers','instructions'].filter(unit => draft.choices[unit]);
+    const selected = body.unit || (chosen.length === 1 ? chosen[0] : null);
     if (!selected || !draft.choices[selected]) return { ...await state(), outcome: { status: 'refused', reason: 'Choose the selected unit to review. Units are prepared independently; other selections stay chosen.' } };
-    const built = selected === 'superpowers' ? await superpowersRequest() : { request: instructionsRequest() };
+    const built = selected === 'extensions' ? await extensionsInstaller.request({ mode, target, profile }) : selected === 'superpowers' ? await superpowersRequest() : { request: instructionsRequest() };
     if (built.result) return { ...await state(), outcome: built.result };
     const request = built.request, current = await inventory();
-    const ids = selected === 'instructions' ? ['project-instructions'] : current.entries?.filter(entry => entry.framework === 'superpowers').map(entry => entry.managementId) || [];
+    const ids = selected === 'instructions' ? ['project-instructions'] : current.entries?.filter(entry => entry.framework === selected).map(entry => entry.managementId) || [];
     const installed = current.entries?.some(entry => ids.includes(entry.managementId));
     const result = installed ? await core.prepareUpdate({ target: { project }, scope: 'project', updates: [{ managementIds: ids, request }] }, controls(request)) : await core.prepare(request, controls(request));
-    return storePrepared(result, installed ? 'update' : 'install', request);
+    return storePrepared(result, installed ? 'update' : 'install', request, selected === 'extensions');
   }
   if (action === 'remove') {
     invalidate();
     const current = await inventory();
     if (!current.entries?.some(entry => entry.managementId === body.managementId)) throw Object.assign(Error('Unknown managed unit'), { code: 'UNKNOWN_UNIT' });
     const result = await core.prepareRemoval({ mode, target, scope: 'project', removals: [{ managementId: body.managementId }] }, controls());
-    const prepared = await storePrepared(result, 'remove', null);
-    review.removedUnit = current.entries.find(entry => entry.managementId === body.managementId)?.framework === 'superpowers' ? 'superpowers' : body.managementId === 'project-instructions' ? 'instructions' : null;
+    const removedEntry = current.entries.find(entry => entry.managementId === body.managementId);
+    const prepared = await storePrepared(result, 'remove', null, removedEntry.framework === 'extensions' && !!removedEntry.plugins?.length);
+    const removedFramework = current.entries.find(entry => entry.managementId === body.managementId)?.framework;
+    review.removedUnit = ['extensions','superpowers'].includes(removedFramework) ? removedFramework : body.managementId === 'project-instructions' ? 'instructions' : null;
     return prepared;
   }
   if (action === 'apply') {
@@ -278,12 +293,12 @@ async function dispatch(action, body) {
     const result = await core.apply(selected.result.handle, { approved: true, origin: 'interactive', reviewDigest: body.reviewDigest }, controls(selected.request));
     if (selected.request && result.completion === 'complete') {
       lastRequest = selected.request;
-      requests[selected.request.schema.includes('change-request') ? 'instructions' : 'superpowers'] = selected.request;
+      requests[requestUnit(selected.request)] = selected.request;
       await persist();
     }
     if (selected.operation === 'remove' && result.completion === 'complete') {
       const remaining = await inventory();
-      const stillPresent = selected.removedUnit === 'instructions' ? remaining.entries.some(entry => entry.managementId === 'project-instructions') : remaining.entries.some(entry => entry.framework === 'superpowers' || entry.items?.some(item => item.startsWith('superpowers.')));
+      const stillPresent = selected.removedUnit === 'instructions' ? remaining.entries.some(entry => entry.managementId === 'project-instructions') : remaining.entries.some(entry => entry.framework === selected.removedUnit || entry.items?.some(item => item.startsWith(selected.removedUnit + '.')));
       if (selected.removedUnit && !stillPresent) delete requests[selected.removedUnit];
       lastRequest = Object.values(requests).at(-1) || null; await persist();
     }
@@ -292,26 +307,47 @@ async function dispatch(action, body) {
   }
   if (action === 'check-claude') {
     const current = await state();
-    const installed = current.inventory.entries?.find(entry => entry.framework === 'superpowers' && entry.localPlugin);
+    const supported = entry => entry.localPlugin || entry.plugins?.some(plugin => plugin.cli === 'claude-code');
+    const requestedUnit = body.unit || (current.inventory.entries?.some(entry => entry.framework === 'extensions' && supported(entry)) ? 'extensions' : 'superpowers');
+    const installed = current.inventory.entries?.find(entry => entry.framework === requestedUnit && supported(entry));
     if (!installed) {
-      throw Object.assign(Error('Install the Superpowers plugin in this project before checking it.'), { code: 'PLUGIN_NOT_INSTALLED' });
+      throw Object.assign(Error('Install the selected connected plugin in this project before checking it.'), { code: 'PLUGIN_NOT_INSTALLED' });
     }
     const prefix = '/enabledPlugins/';
     const setting = installed.members?.find(member => member.kind === 'config-entry' && member.clis?.includes('claude-code') && member.pointer?.startsWith(prefix));
-    const pluginId = setting?.pointer.slice(prefix.length);
+    const saved = requests[requestedUnit];
+    const native = saved?.plan?.plan?.find(step => step.op === 'plugin' && step.cli === 'claude-code' && step.framework === installed.framework && installed.plugins?.some(receipt => receipt.step === saved.plan.plan.indexOf(step) && receipt.plugin === step.plugin && receipt.commit === step.commit));
+    const pluginId = native ? native.plugin + '@' + native.marketplaceName : setting?.pointer.slice(prefix.length);
     let status = 'unconfirmed', message = 'The install record has no Claude Code plugin ID.';
+    let evidence = null;
     if (pluginId && typeof harnessRuntime.observeClaudePlugins !== 'function') {
       message = 'This Core build cannot read Claude Code’s loaded plugins. Use the Core build with the project plugin check.';
     } else if (pluginId) {
       const readback = await harnessRuntime.observeClaudePlugins({ project, home: join(root, 'home') });
       if (readback.status === 'observed') {
-        const matches = readback.plugins.filter(plugin => plugin.source === pluginId && plugin.name === installed.framework);
-        const manifest = installed.localPlugin.files?.find(file => file.endsWith('/.claude-plugin/plugin.json'));
+        const pluginName = pluginId.slice(0, pluginId.lastIndexOf('@'));
+        const matches = readback.plugins.filter(plugin => plugin.source === pluginId && plugin.name === pluginName);
+        const manifest = installed.localPlugin?.files?.find(file => file.endsWith('/.claude-plugin/plugin.json'));
         const expectedFolder = manifest && await realpath(join(project, dirname(dirname(manifest)))).catch(() => null);
         const observedFolders = await Promise.all(matches.filter(plugin => isAbsolute(plugin.path)).map(plugin => realpath(plugin.path).catch(() => null)));
-        if (expectedFolder && observedFolders.some(folder => folder && relative(expectedFolder, folder) === '')) {
+        let nativeMatch = false;
+        if (native) {
+          const expected = saved.contents?.find(content => content.framework.id === installed.framework)?.plugins?.find(plugin => plugin.scanKey === native.scanKey)?.files;
+          const cache = await realpath(join(root, 'home', '.claude', 'plugins', 'cache')).catch(() => null);
+          for (const folder of observedFolders.filter(Boolean)) {
+            const path = cache && relative(cache, folder);
+            if (!cache || !path || path === '..' || path.startsWith('..' + (process.platform === 'win32' ? '\\' : '/')) || isAbsolute(path)) continue;
+            const actual = catalogNode.readLocalSource(folder);
+            if (expected?.length && actual.status === 'ok' && actual.files.length === expected.length && expected.every(file => actual.files.some(candidate => candidate.path === file.sourcePath && candidate.sha256 === file.sha256 && candidate.bytes))) {
+              nativeMatch = true;
+              evidence = { source:native.repository, commit:native.commit, scanKey:native.scanKey, matchedFiles:expected.length, path:folder };
+              break;
+            }
+          }
+        }
+        if (nativeMatch || expectedFolder && observedFolders.some(folder => folder && relative(expectedFolder, folder) === '')) {
           status = 'loaded';
-          message = 'Claude Code reported ' + pluginId + ' as loaded from this project’s installed plugin folder.';
+          message = nativeMatch ? 'Claude Code reported ' + pluginId + ' as loaded. All ' + evidence.matchedFiles + ' files in its native cache match the pinned plugin reviewed for this project.' : 'Claude Code reported ' + pluginId + ' as loaded from this project’s installed plugin folder.';
         } else if (matches.length) {
           message = 'Claude Code reported ' + pluginId + ', but its loaded folder could not be matched to this installation.';
         } else {
@@ -330,21 +366,21 @@ async function dispatch(action, body) {
           (reasons[readback.reason] ?? 'Core could not verify a complete response for this project.');
       }
     }
-    return { ...current, clientCheck: { status, message, pluginId, checkedAt: new Date().toISOString() } };
+    return { ...current, clientCheck: { status, message, pluginId, framework:installed.framework, evidence, scope:'Plugin readback only: no user prompt, model turn, hooks or MCP servers are run.', checkedAt: new Date().toISOString() } };
   }
   if (action === 'check') {
     const installed = await inventory(), checks = [];
     for (const [unit, saved] of Object.entries(requests)) {
       // Persisted intent excludes source bytes. Restore only members in the exact pinned
       // Catalog acquisition cache; check never acquires new content from the network.
-      const request = saved.files ? { ...saved, files: saved.files.map(file => ({ ...file, bytes: file.bytes || sourceResult?.files?.find(source => source.path === file.sourcePath && source.sha256 === file.sha256)?.bytes })) } : saved;
+      const request = saved.files ? { ...saved, files: saved.files.map(file => ({ ...file, bytes: file.bytes || (unit === 'extensions' ? extensionsInstaller.files() : sourceResult?.files)?.find(source => source.path === file.sourcePath && source.sha256 === file.sha256)?.bytes })) } : saved;
       const checkControls = request.schema === 'urn:aihq:core:plan-request:0.1.0' ? { catalog: controls(request).catalog } : {};
       const result = await core.checkFiles(request, checkControls);
       const admission = await currentAdmission(saved, installed);
       checks.push({ unit, check: result, admission });
     }
     const result = checks.at(-1) || { check: { status: 'refused', reason: 'No completed request retained in this workspace.' }, admission: null };
-    return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.values(requests).some(request => request.changes?.some(change => change.managementId === entry.managementId) || request.plan && (entry.framework === 'superpowers' || entry.items?.some(item => item.startsWith('superpowers.'))))).map(entry => entry.managementId) } };
+    return { ...await state(), ...result, checks, coverage: { retainedUnits: checks.map(row => row.unit), untrackedInventory: installed.entries.filter(entry => !Object.values(requests).some(request => request.changes?.some(change => change.managementId === entry.managementId) || request.plan && (entry.framework === requestUnit(request) || entry.items?.some(item => item.startsWith(requestUnit(request) + '.'))))).map(entry => entry.managementId) } };
   }
   if (action === 'inspect') {
     inspection = await core.inspect({ target: ['node', 'npm', 'git'], offline: true, project }); remember('inspect', inspection);

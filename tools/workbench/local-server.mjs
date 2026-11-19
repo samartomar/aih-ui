@@ -32,10 +32,10 @@ function validate(action, body) {
     prepare: ['mode'], remove: ['mode', 'managementId'], apply: ['mode', 'id', 'context', 'reviewDigest'],
     check: ['mode'], 'check-claude': ['mode'], inspect: ['mode'], repair: ['mode'], report: ['mode'],
   }[action];
-  const allowed = action.startsWith('policy') ? [...expected, 'frameworkRules'] : action === 'prepare' ? [...expected, 'unit'] : expected;
+  const allowed = action.startsWith('policy') ? [...expected, 'frameworkRules'] : ['prepare','check-claude'].includes(action) ? [...expected, 'unit'] : expected;
   if (!keys(body, allowed) || expected.some(key => !(key in body))) throw fail('Invalid action fields');
-  if ('unit' in body && !['superpowers', 'instructions'].includes(body.unit)) throw fail('Unknown installation unit');
-  if (action === 'draft' && (!keys(body.choices, ['instructions', 'superpowers']) || Object.keys(body.choices).length !== 2 || Object.values(body.choices).some(value => typeof value !== 'boolean') || typeof body.text !== 'string' || body.text.length > 12000)) throw fail('Invalid draft');
+  if ('unit' in body && !['extensions','superpowers', 'instructions'].includes(body.unit)) throw fail('Unknown installation unit');
+  if (action === 'draft' && (!keys(body.choices, ['instructions', 'superpowers','extensions']) || !['instructions','superpowers'].every(key => key in body.choices) || Object.values(body.choices).some(value => typeof value !== 'boolean') || typeof body.text !== 'string' || body.text.length > 12000)) throw fail('Invalid draft');
   if (action.startsWith('policy') && (body.mode !== 'enterprise' || typeof body.id !== 'string' || body.id.length > 120 || !['permitted', 'recommended', 'required', 'prohibited'].includes(body.obligation) || typeof body.allowCustom !== 'boolean')) throw fail('Invalid organization draft');
   for (const field of ['managementId', 'context', 'reviewDigest']) if (field in body && (typeof body[field] !== 'string' || body[field].length > 300)) throw fail('Invalid identifier');
   if ('id' in body && typeof body.id !== 'string') throw fail('Invalid identifier');
@@ -45,13 +45,16 @@ async function bodyOf(request, limit = 65536) {
   for await (const chunk of request) { size += chunk.length; if (size > limit) throw fail('Request exceeds the size limit', 'BODY_LIMIT', 413); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw fail('Expected JSON'); }
 }
-function startWorker({ consumer, workspace, mode, sourceCache, recipeCommit }) {
+function startWorker({ consumer, workspace, mode, sourceCache, recipeCommit, extensionsRecipeCommit, extensionsSourceCache }) {
   const root = join(workspace, mode), home = join(root, 'home');
   return (async () => {
     await mkdir(home, { recursive: true });
+    const isolatedEnv = { ...process.env };
+    for (const key of Object.keys(isolatedEnv)) if (/^(?:ANTHROPIC_|CLAUDE_|OPENAI_|AWS_|AMAZON_|BEDROCK_|GOOGLE_|GCLOUD_|AZURE_|MSI_|GH_TOKEN$|GITHUB_TOKEN$)/i.test(key)) delete isolatedEnv[key];
+    Object.assign(isolatedEnv, { CLAUDE_CONFIG_DIR:join(home,'.claude'), GIT_CONFIG_NOSYSTEM:'1', GIT_CONFIG_GLOBAL:join(home,'.gitconfig'), GIT_TERMINAL_PROMPT:'0' });
     const child = fork(join(here, 'local-worker.mjs'), [consumer, root, mode], {
       cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-      env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'), XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, '.local', 'share'), AIH_SOURCE_CACHE: sourceCache || '', AIH_RECIPE_COMMIT: recipeCommit || '' },
+      env: { ...isolatedEnv, HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'), XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, '.local', 'share'), AIH_SOURCE_CACHE: sourceCache || '', AIH_RECIPE_COMMIT: recipeCommit || '', AIH_EXTENSIONS_RECIPE_COMMIT: extensionsRecipeCommit || '', AIH_EXTENSIONS_SOURCE_CACHE: extensionsSourceCache || '' },
     });
     let sequence = 0, pending = new Map(), logs = '';
     child.stderr.on('data', bytes => { logs = (logs + bytes).slice(-4000); });
@@ -78,10 +81,10 @@ function startWorker({ consumer, workspace, mode, sourceCache, recipeCommit }) {
   })();
 }
 
-export async function createPrototypeServer({ consumer, workspace, port = 0, sourceCache, recipeCommit = 'baec1884f1d7aa5262535a16d447c1094c258a07' } = {}) {
+export async function createPrototypeServer({ consumer, workspace, port = 0, sourceCache, recipeCommit = 'baec1884f1d7aa5262535a16d447c1094c258a07', extensionsRecipeCommit = '11734d9017aaf2e2d9c68bcd37eb6202081d5931', extensionsSourceCache } = {}) {
   if (!consumer || !workspace) throw Error('--consumer and --workspace are required');
   consumer = resolve(consumer); workspace = resolve(workspace);
-  if (sourceCache) sourceCache = resolve(sourceCache);
+  if (sourceCache) sourceCache = resolve(sourceCache);if (extensionsSourceCache) extensionsSourceCache = resolve(extensionsSourceCache);
   const fullCatalog = await createLocalCatalog(consumer, sourceCache);
   await mkdir(workspace, { recursive: true });
   if ((await lstat(workspace)).isSymbolicLink() || await realpath(workspace) !== workspace) throw Error('Workspace must be a direct directory');
@@ -97,7 +100,7 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
     throw error;
   });
   const workers = new Map();
-  try { for (const mode of ['enterprise', 'vibe']) workers.set(mode, await startWorker({ consumer, workspace, mode, sourceCache, recipeCommit })); }
+  try { for (const mode of ['enterprise', 'vibe']) workers.set(mode, await startWorker({ consumer, workspace, mode, sourceCache, recipeCommit, extensionsRecipeCommit, extensionsSourceCache })); }
   catch (error) { for (const worker of workers.values()) worker.child.kill(); throw error; }
   let origin, mutation = Promise.resolve();
   const server = createServer(async (request, response) => {
@@ -174,7 +177,7 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), options = {};
   for (let i = 0; i < args.length; i += 2) {
-    const key = { '--consumer': 'consumer', '--workspace': 'workspace', '--port': 'port', '--source-cache': 'sourceCache', '--recipe-commit': 'recipeCommit' }[args[i]];
+    const key = { '--consumer': 'consumer', '--workspace': 'workspace', '--port': 'port', '--source-cache': 'sourceCache', '--recipe-commit': 'recipeCommit', '--extensions-recipe-commit': 'extensionsRecipeCommit', '--extensions-source-cache': 'extensionsSourceCache' }[args[i]];
     if (!key || !args[i + 1]) throw Error('Expected --consumer <dir> --workspace <dir> [--port <port>] [--source-cache <file>] [--recipe-commit <commit>]');
     options[key] = key === 'port' ? Number(args[i + 1]) : args[i + 1];
   }
