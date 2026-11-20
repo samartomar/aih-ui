@@ -27,29 +27,14 @@ const renderV9 = createReportRenderer({
   importSnapshot: json => readResult(contracts.importSnapshot(json), 'snapshot'),
   exportSnapshot: snapshot => readResult(contracts.exportSnapshot(snapshot), 'json'),
 });
-// Keep the downloaded report self-contained, including its reading preference.
-function withReportPreferences(html, digest) {
-  const style = `<style>
-    :root { scrollbar-color:var(--muted) transparent; scrollbar-width:thin; }
-    :root:has(#wide-report-bars:checked) { scrollbar-width:auto; }
-    .report-scroll-option {display:inline-flex;align-items:center;gap:.3rem;color:var(--muted);font:inherit;font-size:.72rem}
-    @supports selector(::-webkit-scrollbar) {
-      :root, .palette-list, .sankey-wrap {scrollbar-width:auto;scrollbar-color:auto}
-      *::-webkit-scrollbar {width:8px;height:8px}
-      :root:has(#wide-report-bars:checked)::-webkit-scrollbar,
-      :root:has(#wide-report-bars:checked) *::-webkit-scrollbar {width:16px;height:16px}
-      *::-webkit-scrollbar-track {background:var(--surface)}
-      *::-webkit-scrollbar-thumb {background:var(--muted);border:2px solid var(--surface);border-radius:8px}
-      *::-webkit-scrollbar-button {display:none}
-    }
-    .palette-list {resize:vertical;min-height:5rem;max-height:70vh}
-    @media(max-width:600px){.report-scroll-option span{display:none}}
-    </style>`;
-  const option = '<label class="report-scroll-option" title="Wider scrollbars"><input type="checkbox" id="wide-report-bars" aria-label="Wider scrollbars"><span>Wider scrollbars</span></label>';
+// Downloaded reports carry the same local type and slim-scrollbar presentation.
+const reportPresentation = await readFile(new URL('../../src/styles/reviewed-report.css', import.meta.url), 'utf8');
+function withReportPresentation(html, digest) {
+  const style = '<style>' + reportPresentation + '</style>';
   const scope = mode === 'enterprise' ? 'Enterprise' : 'Vibe';
   const capture = digest ? '<span title="SHA-256 '+digest+'">Saved capture <code>'+digest.slice(0,12)+'</code></span>' : '<span>No saved capture</span>';
   const identity = '<div class="report-identity" style="margin:.25rem 0;color:var(--muted);font-size:.8rem">'+scope+' · '+capture+'</div>';
-  return html.replace('</head>', style + '</head>').replace('<div class="tb-right">', '<div class="tb-right">' + option)
+  return html.replace('</head>', style + '</head>')
     .replace('<div class="brand-text">', '<div class="brand-text">'+identity)
     .replace('</body>', () => '<script>(' + enableReportKeyboard.toString() + ')();</script></body>');
 }
@@ -269,9 +254,9 @@ async function dispatch(action, body) {
         const projected = snapshot && readResult(contracts.importSnapshot(
           readResult(contracts.exportSnapshot(snapshot), 'json')
         ), 'snapshot');
-        return withReportPreferences(developerConsole(projected, '/reports/'+mode+'/'+body.digest+'.html'), body.digest);
+        return withReportPresentation(developerConsole(projected, '/reports/'+mode+'/'+body.digest+'.html'), body.digest);
       }
-      return withReportPreferences(renderV9(snapshot, {title:'Workbench diagnostic report'}), body.digest);
+      return withReportPresentation(renderV9(snapshot, {title:'Workbench diagnostic report'}), body.digest);
     }
     catch (error) { if (error.code === 'ENOENT') throw Error('No saved snapshot for this report.'); throw error; }
   }
