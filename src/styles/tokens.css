@@ -157,6 +157,9 @@ html.light {
   --inspector-width: 420px;
   --font: "Geist", sans-serif;
   --mono: "Geist Mono", monospace;
+  --workbench-font: "Cascadia Mono", Consolas, "SFMono-Regular", "Liberation Mono", monospace;
+  --workbench-reading-size: 13px;
+  --workbench-control-size: 12px;
   --fw-light: 300; --fw-regular: 400; --fw-medium: 500; --fw-strong: 600;
   --track-title: -0.01em;
   --font-title: var(--mono); --font-lab: var(--mono);

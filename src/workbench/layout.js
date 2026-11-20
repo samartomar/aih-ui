@@ -20,14 +20,13 @@
   let nativeResize = null;
 
   function readPreferences() {
-    const result = { regions: {}, scrollbar: 'slim' };
+    const result = { regions: {} };
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
       if (!saved || typeof saved !== 'object') return result;
       if (saved.regions && typeof saved.regions === 'object' && !Array.isArray(saved.regions)) result.regions = saved.regions;
       if (Number.isFinite(saved.rail)) result.rail = saved.rail;
       if (Number.isFinite(saved.inspector)) result.inspector = saved.inspector;
-      if (saved.scrollbar === 'standard') result.scrollbar = 'standard';
     } catch (error) {
       // Layout remains usable when browser storage is unavailable.
     }
@@ -44,13 +43,6 @@
 
   function announce(text) {
     document.getElementById('layout-announcement').textContent = text;
-  }
-
-  function applyScrollbar() {
-    const width = preferences.scrollbar === 'standard' ? 14 : 8;
-    document.documentElement.style.setProperty('--workbench-scrollbar-size', width + 'px');
-    document.documentElement.dataset.scrollbarWidth = preferences.scrollbar;
-    document.getElementById('scrollbar-width').value = preferences.scrollbar;
   }
 
   function currentWidth(part) {
@@ -250,15 +242,14 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     if (button.id === 'layout-reset') {
-      preferences = { regions: {}, scrollbar: 'slim' };
+      preferences = { regions: {} };
       workspace.style.removeProperty('--rail-width');
       workspace.style.removeProperty('--inspector-width');
       remember();
-      applyScrollbar();
       updateWidths();
       schedule(true);
       requestAnimationFrame(syncDividerValues);
-      announce('Layout reset. Slim scrollbars selected.');
+      announce('Layout reset.');
       return;
     }
     const node = button.parentElement.nextElementSibling;
@@ -277,14 +268,6 @@
     announce(labelFor(node) + (preferences.regions[region.key].expanded ? ' expanded.' : ' height ' + Math.round(node.getBoundingClientRect().height) + ' pixels.'));
   }, true);
 
-  document.addEventListener('change', event => {
-    if (event.target.id !== 'scrollbar-width') return;
-    preferences.scrollbar = event.target.value === 'standard' ? 'standard' : 'slim';
-    applyScrollbar();
-    remember();
-    schedule(true);
-    announce(event.target.options[event.target.selectedIndex].text + ' scrollbars selected.');
-  });
   document.addEventListener('pointerdown', event => {
     const node = event.target.closest('.layout-region');
     if (!node || node.classList.contains('layout-expanded')) return;
@@ -320,7 +303,8 @@
   const paneObserver = new ResizeObserver(syncDividerValues);
   dividers.forEach(part => paneObserver.observe(part.pane));
 
-  applyScrollbar();
   updateWidths();
+  // Retain supported pane/region sizes while dropping retired preferences.
+  remember();
   schedule();
 })();

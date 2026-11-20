@@ -1,0 +1,28 @@
+/* Self-contained report presentation; all fonts resolve locally. */
+:root {
+  --mono: "Cascadia Mono", Consolas, "SFMono-Regular", "Liberation Mono", monospace;
+  --sans: var(--mono);
+  --display: var(--mono);
+}
+body { font-family:var(--mono); font-size:13px; line-height:1.55; }
+button, input, select, textarea, summary, label { font-family:inherit; }
+body :is(button, input, select, textarea, summary, label, .badge, .tab, .tb-btn) { font-size:12px; }
+button, input:not([type=checkbox]):not([type=radio]), select { min-height:32px; }
+@media (pointer:coarse) {
+  button, input:not([type=checkbox]):not([type=radio]), select, summary { min-height:44px; }
+}
+* { scrollbar-width:thin; scrollbar-color:var(--muted) transparent; }
+@supports selector(::-webkit-scrollbar) {
+  *, .palette-list, .sankey-wrap, .grlog-wrap, .bars.scroll { scrollbar-width:auto; scrollbar-color:auto; }
+  *::-webkit-scrollbar { width:6px; height:6px; }
+  *::-webkit-scrollbar-track { background:transparent; }
+  *::-webkit-scrollbar-thumb { background:var(--muted); border:1px solid var(--surface); border-radius:6px; }
+  *::-webkit-scrollbar-button { display:none; width:0; height:0; }
+}
+.palette-list { resize:vertical; min-height:5rem; max-height:70vh; }
+@media (forced-colors:active) {
+  *, .palette-list, .sankey-wrap, .grlog-wrap, .bars.scroll { scrollbar-width:auto; scrollbar-color:auto; }
+  *::-webkit-scrollbar { width:auto; height:auto; }
+  *::-webkit-scrollbar-thumb { background:ButtonText; border:0; }
+  *::-webkit-scrollbar-button { display:revert; width:auto; height:auto; }
+}
