@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { checkProjectFolder } from '../consumer/project-folder.mjs';
@@ -42,6 +42,7 @@ export function createApprovedPersonal({ consumer, catalog, sourceConsumer, proj
       if (target?.surface !== 'cli') return unavailable('Choose a published Core CLI target.');
       const bound = await check(core, contracts);
       if (bound.status !== 'ok' || !safePath(bound.project)) return unavailable(bound.reason ?? 'The project folder is unavailable.');
+      const directory = await stat(bound.project, { bigint: true });
       const source = await catalog();
       if (!source) return unavailable('Start the host with prepared Catalog inputs.');
       const { response, requestParts } = source.prepareSelection(items, client);
@@ -65,7 +66,7 @@ export function createApprovedPersonal({ consumer, catalog, sourceConsumer, proj
       if (result.status !== 'ready' || !result.handle || typeof result.review?.reviewDigest !== 'string') {
         return { status: result.status ?? 'unavailable', reason: 'Core did not prepare an applicable change.', diagnostics: result.diagnostics ?? [] };
       }
-      review = { session, id: randomUUID(), project: bound.project, handle: result.handle,
+      review = { session, id: randomUUID(), project: bound.project, directory, handle: result.handle,
         digest: result.review.reviewDigest, request, controls };
       return { status: 'ready', id: review.id, project: bound.project, review: result.review };
     } catch (error) {
@@ -88,6 +89,10 @@ export function createApprovedPersonal({ consumer, catalog, sourceConsumer, proj
       const [{ api: core }, { api: contracts }] = await load();
       const bound = await check(core, contracts);
       if (bound.status !== 'ok' || bound.project !== selected.project) return unavailable('The reviewed project folder changed. Prepare again.');
+      const directory = await stat(bound.project, { bigint: true });
+      if (directory.dev !== selected.directory.dev || directory.ino !== selected.directory.ino) {
+        return unavailable('The reviewed project folder was replaced. Prepare again.');
+      }
       const result = await core.apply(selected.handle, { approved: true, origin: 'interactive', reviewDigest }, selected.controls);
       if (result.completion !== 'complete') return {
         status: 'incomplete', reason: 'Core did not report a complete application.', diagnostics: result.diagnostics ?? [],

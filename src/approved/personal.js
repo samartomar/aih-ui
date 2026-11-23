@@ -39,6 +39,10 @@ export function personalPreparation(host, api, items, clients) {
         return;
       }
       const digest = result.review.reviewDigest;
+      const files = node('ul');
+      for (const step of result.review.steps ?? []) {
+        files.append(node('li', step.sentence ?? [step.op, step.path].filter(Boolean).join(' ')));
+      }
       const details = node('details');
       details.append(node('summary', 'Open the full Core review'), node('pre', JSON.stringify(result.review, null, 2)));
       const apply = action('Apply reviewed project files', async () => {
@@ -60,8 +64,9 @@ export function personalPreparation(host, api, items, clients) {
       const approval = checkbox('I reviewed this change and approve writing these project files', false, value => { apply.disabled = !value; });
       const confirmation = hint('');
       confirmation.setAttribute('aria-live', 'polite');
-      output.replaceChildren(facts([['Project folder', result.project], ['Core review digest', digest]]), details,
-        approval, apply, confirmation);
+      output.replaceChildren(facts([['Project folder', result.project], ['Core review digest', digest]]));
+      if (files.childElementCount) output.append(node('h4', 'Core reviewed changes'), files);
+      output.append(details, approval, apply, confirmation);
     } catch (error) {
       if (!api.signal.aborted) output.replaceChildren(hint(error.message));
     } finally {
@@ -74,6 +79,7 @@ export function personalPreparation(host, api, items, clients) {
   const panel = section('Prepare project files',
     hint('Prepare only the selected Catalog files for one CLI. Framework bases, guides, personal files, and Tool Setup are reviewed separately.'),
     status, field('CLI target', target), project, prepare, output);
+  if (!items.length || !clients.length) panel.append(hint('Choose available Catalog items and a CLI target before preparing project files.'));
   host.append(panel);
   project.hidden = true;
   refresh();

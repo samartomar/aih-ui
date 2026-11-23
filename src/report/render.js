@@ -329,7 +329,54 @@ export function renderEmptyReport(title = DEFAULT_TITLE) {
   return renderEvidenceShell(title, banner);
 }
 
-export function renderWorkbenchOverview({ catalog, clients, tools, packages }, title = DEFAULT_TITLE) {
+function assessmentBars(rows, total) {
+  return rows.map(([label, count, tone]) => `<div class="mat-row"><div class="mat-bar-wrap">
+    <span class="mat-label">${esc(label)}</span><span class="mat-track">
+    <span class="mat-fill ${tone}" style="width:${total ? Math.round(count / total * 100) : 0}%"></span></span></div>
+    <span class="mat-val">${count}</span></div>`).join('');
+}
+
+function assessmentPanel(catalog, assessment) {
+  const title = 'Catalog Scan assessments';
+  if (assessment?.status !== 'read' || !Array.isArray(catalog)) {
+    return { state: 'empty', html: emptyPanel('10', title, 'Recorded evidence for this Workbench’s Catalog scope.', title,
+      esc(assessment?.reason ?? 'Waiting for the configured Scan summaries.')) };
+  }
+  const rowsById = new Map(assessment.assessments.map(row => [row.id, row]));
+  const rows = catalog.map(item => rowsById.get(item.id));
+  const assessed = rows.filter(row => row?.status === 'read');
+  const missing = rows.filter(row => row?.status === 'missing').length;
+  const noKey = rows.filter(row => row?.status === 'no-key').length;
+  const unavailable = rows.length - assessed.length - missing - noKey;
+  const verdicts = [
+    ['SAFE', '', 'SAFE'], ['CAUTION', 'warn', 'CAUTION'], ['DO NOT INSTALL', 'bad', 'DO NOT INSTALL'],
+  ].map(([label, tone, match]) => [label, assessed.filter(row => row.label === match).length, tone]);
+  verdicts.push(['Other reported labels', assessed.length - verdicts.reduce((total, row) => total + row[1], 0), '']);
+  const coverages = [...new Set(assessed.map(row => row.coverage ?? 'Not supplied'))].sort();
+  const coverage = coverages.map(label => [label, assessed.filter(row => (row.coverage ?? 'Not supplied') === label).length, '']);
+  const dates = assessed.map(row => row.scannedAt).filter(date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(date)).sort();
+  const dateRange = dates.length ? dates[0] === dates.at(-1) ? dates[0] : dates[0] + ' to ' + dates.at(-1) : 'Not supplied';
+  const scope = [...new Set(catalog.map(item => item.frameworkName).filter(Boolean))].sort();
+  const revisions = [...new Set(catalog.map(item => item.root?.releaseSha256 ?? item.framework)
+    .filter(value => /^[a-f0-9]{64}$/.test(value)))].sort();
+  const scopeText = scope.length ? scope.join(', ') : 'No Catalog items in scope';
+  const details = [
+    ['Catalog scope', scopeText], ['Exact content revisions', revisions.join(', ') || 'Not supplied'],
+    ['Recorded scan dates (UTC)', dateRange], ['Summaries read at (UTC)', assessment.checkedAt ?? 'Not supplied'],
+    ['Signature status', 'Signatures were not checked for this graph. Open an item’s Scan evidence for its signature status.'],
+  ].map(([label, value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join('');
+  return { state: 'live', html: head('10', 'live', 'configured Scan summaries', title,
+    'One result per exact Catalog item available to this role. Labels and coverage come from the matching saved summaries.', assessed.length + ' of ' + rows.length + ' read') +
+    `<div class="grid">
+      <div class="card span-6"><div class="card-head"><h3>Recorded Scan labels</h3></div><div class="card-body"><div class="mat">${assessmentBars(verdicts, assessed.length)}</div></div></div>
+      <div class="card span-6"><div class="card-head"><h3>Detector coverage and evidence availability</h3></div><div class="card-body"><div class="mat">${assessmentBars([
+        ...coverage, ['Missing summary', missing, 'warn'], ['No supported Scan key', noKey, ''], ['Unreadable or unreported', unavailable, 'bad'],
+      ], rows.length)}</div></div></div>
+      <div class="card span-12"><div class="card-head"><h3>Scope and evidence dates</h3></div><div class="card-body"><dl class="kv">${details}</dl></div></div>
+    </div>` };
+}
+
+export function renderWorkbenchOverview({ catalog, clients, tools, packages, assessment }, title = DEFAULT_TITLE) {
   const knownCatalog = Array.isArray(catalog);
   const groups = new Map();
   for (const item of catalog ?? []) {
@@ -357,6 +404,7 @@ export function renderWorkbenchOverview({ catalog, clients, tools, packages }, t
     'sec-hero': { state: 'live', html: left + right },
     ...(adoption ? { 'sec-adoption': adoption } : {}),
   } : {};
+  live['sec-skillgov'] = assessmentPanel(catalog, assessment);
   const banner = '<div class="whatsnew"><span class="tag">WORKBENCH</span><span>Current host inventory. Open a saved Core snapshot to see recorded checks.</span></div>';
   return renderEvidenceShell(title, banner, live);
 }

@@ -269,7 +269,7 @@ label.ix-tool-label {cursor:pointer}
 
 html[data-workbench-theme="light"] #intake-view {
   color-scheme:light;
-  
+
   :is(a,button,input,textarea,select,summary):focus-visible { outline-color:var(--blue) }
   .ix-global, .ix-roles { background:var(--ix-chrome); border-color:var(--soft) }
   .ix-brand { color:var(--muted) }

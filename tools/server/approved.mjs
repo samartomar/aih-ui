@@ -9,7 +9,7 @@ export async function createApprovedAdapter(consumerDir) {
   if (published.state === 'legacy') return null;
   const items = new Map(published.items.map(item => [item.id, item]));
   const toolConsumer = process.env.AIH_APPROVED_TOOL_CONSUMER ?? consumerDir;
-  let planner;
+  let planner, assessmentCheck;
   const catalogPlanner = () => planner ??= isAbsolute(toolConsumer)
     ? createLocalCatalog(consumerDir, undefined, toolConsumer).catch(() => null) : Promise.resolve(null);
   const personal = createApprovedPersonal({ consumer: consumerDir, catalog: catalogPlanner,
@@ -24,7 +24,7 @@ export async function createApprovedAdapter(consumerDir) {
     async handle(request, response, pathname) {
       const importing = pathname === '/api/repository-scan-import';
       const personalPath = ['/api/approved-personal', '/api/approved-personal-prepare', '/api/approved-personal-apply'].includes(pathname);
-      if (pathname !== '/api/repository-scan' && pathname !== '/api/approved-evidence' &&
+      if (pathname !== '/api/repository-scan' && pathname !== '/api/approved-evidence' && pathname !== '/api/approved-assessments' &&
         pathname !== '/api/approved-tool-plan' && !importing && !personalPath && !pathname.startsWith('/api/authoring-')) return false;
       const host = request.headers.host;
       if (![`127.0.0.1:${request.socket.localPort}`, `localhost:${request.socket.localPort}`].includes(host) ||
@@ -114,6 +114,12 @@ export async function createApprovedAdapter(consumerDir) {
           const invalid = error.code === 'CATALOG_INPUT_INVALID';
           reply(response, invalid ? 400 : 500, { status: 'unavailable', reason: invalid ? error.message : 'Catalog could not preview this tool setup.' });
         }
+      } else if (request.method === 'GET' && pathname === '/api/approved-assessments') {
+        assessmentCheck ??= callServiceAsync(consumerDir, { op: 'approvedAssessments',
+          items: published.items.map(({ id, scanKey }) => ({ id, scanKey })) });
+        const result = await assessmentCheck;
+        if (!result.ok) assessmentCheck = undefined;
+        reply(response, 200, result.ok ? result : { status: 'unavailable', reason: 'The public Scan reader could not summarize these assessments.' });
       } else if (request.method === 'GET' && pathname === '/api/approved-evidence') {
         const id = new URL(request.url, `http://${host}`).searchParams.get('item');
         const item = items.get(id);

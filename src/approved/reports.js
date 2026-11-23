@@ -17,20 +17,20 @@ export function renderReports(host, api) {
   const frame = node('iframe', null, 'ix-v9-frame');
   frame.title = 'V9 report snapshot';
   frame.setAttribute('sandbox', 'allow-scripts');
-  let snapshot, saved, request = 0;
+  let snapshot, saved, assessment, rendering = false, request = 0;
   const overview = () => {
     const data = api.currentData();
     return renderWorkbenchOverview({
-      catalog: data.gaps.catalog ? null : data.items,
+      catalog: data.gaps.catalog && !data.items.length ? null : data.items,
       clients: data.gaps.clients ? null : data.clients,
       tools: data.gaps.tools ? null : data.tools,
-      packages: data.packages,
+      packages: data.packages, assessment,
     }, 'V9 Developer Console');
   };
   let documentHtml = overview();
   let visible = false;
   window.addEventListener('aih-workbench-data', () => {
-    if (!visible && !saved && !snapshot) show(overview());
+    if (!visible && !saved && !rendering) show(overview());
   }, { signal: api.signal });
 
   async function show(html) {
@@ -60,6 +60,7 @@ export function renderReports(host, api) {
   const render = action('Render snapshot', async () => {
     const current = ++request;
     render.disabled = true;
+    rendering = true;
     save.hidden = true;
     status.textContent = 'Validating snapshot with Core…';
     try {
@@ -82,7 +83,7 @@ export function renderReports(host, api) {
     } catch (error) {
       if (current === request) status.textContent = error.message;
     } finally {
-      if (current === request) render.disabled = false;
+      if (current === request) { render.disabled = false; rendering = false; }
     }
   }, true);
   render.disabled = true;
@@ -92,6 +93,7 @@ export function renderReports(host, api) {
   const body = node('div', null, 'ix-v9-file-body');
   body.append(fileField('Core report snapshot', '.json,application/json', file => {
     request++;
+    rendering = false;
     snapshot = file;
     render.disabled = false;
     save.hidden = true;
@@ -109,6 +111,17 @@ export function renderReports(host, api) {
   status.className = 'ix-hint ix-v9-status';
   host.append(toolbar, status, frame);
   show(documentHtml);
+  fetch('/api/approved-assessments', { signal: api.signal })
+    .then(response => response.ok ? response.json() : { status: 'unavailable', reason: 'No Catalog Scan assessment endpoint is available on this host.' })
+    .then(value => {
+      if (api.signal.aborted) return;
+      assessment = value;
+      if (!visible && !saved && !rendering) show(overview());
+    }).catch(() => {
+      if (api.signal.aborted) return;
+      assessment = { status: 'unavailable', reason: 'The Catalog Scan assessment request failed.' };
+      if (!visible && !saved && !rendering) show(overview());
+    });
 }
 
 export function renderDiagnostics(host, api) {
@@ -119,9 +132,9 @@ export function renderDiagnostics(host, api) {
     result.replaceChildren(hint('Running Core inspection…'));
     const answer = await api.data.inspectTools();
     if (api.signal.aborted) return;
+    inspect.disabled = false;
     if (answer.state !== 'inspected') {
       result.replaceChildren(hint(answer.reason ?? 'Core inspection is unavailable.'));
-      inspect.disabled = false;
       return;
     }
     result.replaceChildren(facts([

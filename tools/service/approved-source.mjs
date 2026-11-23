@@ -3,6 +3,7 @@ import { open } from 'node:fs/promises';
 import { delimiter, isAbsolute, join } from 'node:path';
 import * as catalog from '@aihq/catalog/reader';
 import * as scan from '@aihq/scan/read';
+import { assessmentRows } from './assessment-rows.mjs';
 
 async function readBounded(path, limit) {
   const file = await open(path, 'r');
@@ -51,29 +52,44 @@ export async function approvedCatalog() {
   return { state: 'read-only', frameworks: [...frameworks.values()], items, problems };
 }
 
-export async function approvedEvidence({ scanKey }) {
+async function readSavedSummary(scanKey) {
   const directory = process.env.AIH_APPROVED_SCAN_SUMMARIES;
   if (!directory || !isAbsolute(directory)) return { status: 'unavailable', reason: 'No Scan summary source is configured.' };
   if (typeof scan.readSummary !== 'function') return { status: 'unavailable', reason: 'This Scan package does not publish a summary reader.' };
   if (typeof scanKey !== 'string' || !/^git-sha1:[a-f0-9]{40}$/.test(scanKey)) {
-    return { status: 'unavailable', reason: 'Catalog supplies no supported Scan key for this item.' };
+    return { status: 'no-key', reason: 'Catalog supplies no supported Scan key for this item.' };
   }
   const artifact = join(directory, scanKey.replace(':', '-'));
   let bytes;
   try { bytes = await readBounded(join(artifact, 'summary.json'), 2 * 1024 * 1024); }
   catch (error) {
-    return error.code === 'ENOENT' ? { status: 'unavailable', reason: 'No saved Scan summary for this Catalog key.' }
+    return error.code === 'ENOENT' ? { status: 'missing', reason: 'No saved Scan summary for this Catalog key.' }
       : { status: 'failed', reason: 'The saved Scan summary could not be read.' };
   }
   const checked = scan.readSummary(bytes);
   if (checked.status !== 'ok') return { status: 'invalid', reason: `Scan refused the saved summary (${checked.status}).` };
   if (checked.summary.scanKey !== scanKey) return { status: 'invalid', reason: 'The saved Scan summary has a different key.' };
+  return { status: 'read', summary: checked.summary, artifact, bytes };
+}
+
+export async function approvedAssessments({ items }) {
+  const directory = process.env.AIH_APPROVED_SCAN_SUMMARIES;
+  if (!directory || !isAbsolute(directory)) return { status: 'unavailable', reason: 'No Scan summary source is configured.' };
+  if (typeof scan.readSummary !== 'function') return { status: 'unavailable', reason: 'This Scan package does not publish a summary reader.' };
+  return { status: 'read', checkedAt: new Date().toISOString(), assessments: await assessmentRows(items, readSavedSummary) };
+}
+
+export async function approvedEvidence({ scanKey }) {
+  const selected = await readSavedSummary(scanKey);
+  if (selected.status !== 'read') return ['missing', 'no-key'].includes(selected.status)
+    ? { ...selected, status: 'unavailable' } : selected;
+  const { artifact, bytes, summary } = selected;
   const [verification, findings] = await Promise.all([
-    verifySummary(artifact, bytes), readFindings(artifact, checked.summary),
+    verifySummary(artifact, bytes), readFindings(artifact, summary),
   ]);
   return {
     status: 'read', authentication: verification.signer?.trusted === true ? 'verified' : 'not-verified', verification,
-    assessment: { summary: checked.summary, findings: findings.rows, findingsStatus: findings.status },
+    assessment: { summary, findings: findings.rows, findingsStatus: findings.status },
   };
 }
 

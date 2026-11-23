@@ -176,22 +176,22 @@ html.light {
   --printed:#18191c;
   --ink:#f1f2f4;
   --muted:#aaaab4;
- 
+
   --line:#35363b;
   --soft:#26272c;
   --blue:#c5baff;
   --tint:#282433;
   --onblue:#16151b;
- 
+
   --high:#ffb8aa;
   --high-bg:#392522;
   --low:#b4c6de;
   --low-bg:#202734;
- 
+
   --warn:#efbd88;
   --sans:"Workbench Inter",Inter,"Segoe UI",system-ui,sans-serif;
   --mono:Plex,Consolas,monospace;
- 
+
   --ix-icon-quiet:#93949e;
   --ix-catalog:#afa2d0;
   --ix-byo:#8faac2;

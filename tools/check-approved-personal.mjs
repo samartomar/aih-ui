@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rename, rm, rmdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +30,18 @@ if (!project) {
   const session = 'fixture-session';
   const selection = { items, client: 'claude-code', binding: project, session };
   assert.deepEqual(await readdir(project), []);
+  const substitute = await mkdtemp(join(project, 'directory-check-'));
+  const original = substitute + '-original';
+  const swap = createApprovedPersonal({consumer, catalog: () => catalog, sourceConsumer:consumer, project:substitute});
+  const swapReview = await swap.prepare({...selection, binding:substitute});
+  assert.equal(swapReview.status, 'ready');
+  await rename(substitute, original);
+  await mkdir(substitute);
+  const refused = await swap.apply({id:swapReview.id, reviewDigest:swapReview.review.reviewDigest, session, confirmed:true});
+  assert.equal(refused.status, 'unavailable');
+  assert.deepEqual(await readdir(substitute), []);
+  await rmdir(substitute);
+  await rmdir(original);
   assert.equal((await native.prepare({ ...selection, binding: '' })).status, 'unavailable');
   assert.equal((await native.prepare({ ...selection, items: [{ ...items[0], id: 'wrong-release/' + itemId }] })).status, 'unavailable');
   const prepared = await native.prepare(selection);

@@ -29,6 +29,10 @@ const OPS = {
     const { approvedCatalog } = await import('./approved-source.mjs');
     return approvedCatalog();
   },
+  async approvedAssessments(request) {
+    const { approvedAssessments } = await import('./approved-source.mjs');
+    return approvedAssessments(request);
+  },
   async approvedEvidence(request) {
     const { approvedEvidence } = await import('./approved-source.mjs');
     return approvedEvidence(request);
