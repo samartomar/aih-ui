@@ -287,9 +287,17 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
       pull.head?.ref === receipt.headBranch && pull.head.repo?.full_name?.toLowerCase() === receipt.repository.toLowerCase() &&
       pull.base?.repo?.full_name?.toLowerCase() === receipt.repository.toLowerCase() && pull.base.ref === receipt.baseBranch;
   }
+  function requireReviewIdentity(record, identity) {
+    if (identity.id !== record.identity.id) {
+      throw Object.assign(Error('Sign in as the account that previewed this GitHub proposal.'), {
+        enterpriseStatus: 403, accountMismatch: true,
+      });
+    }
+  }
   async function checkCurrentAccount(record) {
     const [account, baseSha] = await Promise.all([access(), ref(record.baseBranch)]);
-    checked(account.canPropose && account.identity.id === record.identity.id, 'The GitHub account changed. Preview again before continuing.', 403);
+    requireReviewIdentity(record, account.identity);
+    checked(account.canPropose, 'The signed-in account needs repository write access to continue this proposal.', 403);
     checked(baseSha === record.baseSha, 'The base branch advanced. Preview against the new base before continuing.');
   }
   function managedProposal({ repository, baseBranch, kind, path, headBranch, headSha, baseSha, digest }) {
@@ -338,7 +346,7 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
   }
   async function verifyRecovery(record) {
     const [account, commit] = await Promise.all([access(), gitCommit(record.headSha)]);
-    checked(account.identity.id === record.identity.id, 'Sign in as the account that previewed this GitHub proposal.', 403);
+    requireReviewIdentity(record, account.identity);
     checked(commit.parents?.length === 1 && commit.parents[0]?.sha === record.baseSha, 'The saved proposal has a different base commit.');
     const entry = await entryAt(commit.tree.sha, record.path);
     checked(plainFile(entry) && entry.sha === record.blobSha && digestOf(await readBlob(entry.sha)) === record.digest,
@@ -428,7 +436,7 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
       await saveRecovery(record);
       return { receipt };
     } catch (error) {
-      if (record?.durable && error?.enterpriseStatus !== 403) {
+      if (record?.durable && !error?.accountMismatch) {
         const failure = error instanceof Error ? error : new Error('GitHub handoff could not be verified.');
         failure.recovery = recoveryOf(record);
         throw failure;
