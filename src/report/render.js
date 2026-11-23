@@ -321,13 +321,22 @@ function render({ importSnapshot, exportSnapshot }, input, options) {
   // Keep the existing report entry point's validation contract in both modes.
   const snapshot = importSnapshot(exportSnapshot(input));
   if (demo) return renderDesignSample(title);
+  return renderEvidenceShell(title, reportBanner(snapshot), liveSections(snapshot));
+}
+
+export function renderEmptyReport(title = DEFAULT_TITLE) {
+  const banner = '<div class="whatsnew"><span class="tag">NO SNAPSHOT</span><span>Open a saved Core snapshot to view its recorded evidence.</span></div>';
+  return renderEvidenceShell(title, banner);
+}
+
+function renderEvidenceShell(title, banner, live = {}) {
   const sections = {};
   let html = titledShell(title);
   for (const [id, [no, panelTitle, insight, cardTitle, reason]] of Object.entries(EMPTY_PANELS)) {
     sections[id] = { state: 'empty', html: emptyPanel(no, panelTitle, insight, cardTitle, reason) };
   }
-  Object.assign(sections, liveSections(snapshot));
-  html = replaceOnce(html, BANNER_ANCHOR, reportBanner(snapshot));
+  Object.assign(sections, live);
+  html = replaceOnce(html, BANNER_ANCHOR, banner);
   html = replaceOnce(html, RADAR_ANCHOR, `window.AIH_DATA=${scriptJson({ mode: 'report', sections })};\n${NO_RADAR}`);
   for (const [id, section] of Object.entries(sections)) html = replaceSection(html, id, section.state, section.html);
   return html;

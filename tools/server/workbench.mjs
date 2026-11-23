@@ -1,4 +1,5 @@
 import { createApi } from './api.mjs';
+import { createApprovedAdapter } from './approved.mjs';
 import { createAuthoringAdapter, journalFrictionEvidence } from './authoring.mjs';
 import { createBatchAdapter } from './batch.mjs';
 import { createReadinessAdapter } from './readiness.mjs';
@@ -13,7 +14,8 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   // The readiness journal is the friction input for what the person ran here. The readiness adapter is created first because the authoring host's journal provider closes over it
   // and reads it afresh on each improvements check; its child is forked lazily, on the first readiness request.
   const readiness = createReadinessAdapter(consumerDir);
-  const authoring = await createAuthoringAdapter(consumerDir, { coreState, frameworkFixtureInventories, frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
+  const authoring = await createApprovedAdapter(consumerDir) ??
+    await createAuthoringAdapter(consumerDir, { coreState, frameworkFixtureInventories, frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);
   const report = createReportAdapter(consumerDir);
   // Started now and answered when done, so the page can show it loading; it never delays the server.

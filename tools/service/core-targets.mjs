@@ -13,11 +13,21 @@
  * Loaded on demand by core-service.mjs, so an installed Core that does not
  * export the list fails this one operation instead of every operation.
  */
-import { nativeClientIds, targets as harnessTargets } from "@aihq/core/harness";
+import * as harness from "@aihq/core/harness";
 
 const TARGET = /^[a-z][a-z0-9-]{0,63}$/;
 
 export function coreTargets() {
+  const { nativeClientIds, targets: harnessTargets } = harness;
+  // The newer registry publishes selectable CLI identities directly.
+  if (nativeClientIds === undefined) {
+    const registry = harness.listTools?.({ surface: "cli" });
+    if (registry?.status === "ok") return {
+      source: "@aihq/core/harness listTools",
+      targets: registry.tools.map(tool => tool.id),
+      labels: Object.fromEntries(registry.tools.map(tool => [tool.id, tool.label])),
+    };
+  }
   if (!Array.isArray(nativeClientIds) || nativeClientIds.length === 0) {
     throw new Error("@aihq/core/harness exported nativeClientIds, but it is not a non-empty list");
   }

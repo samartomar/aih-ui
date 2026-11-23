@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark;
+  --bg: #08090a;
+  --surface: #121315;
+  --surface-2: #18191c;
+  --surface-3: #202125;
+  --surface-4: #292a30;
+  --border: #26272c;
+  --border-2: #35363b;
+  --border-3: #54555e;
+  --fg: #f1f2f4;
+  --fg-2: #d2d2d9;
+  --muted: #aaaab4;
+  --dim: #9898a3;
+  --accent: #c5baff;
+  --accent-2: #a7c0df;
+  --mcp: #86bdbb;
+  --ok: #9ac9ae;
+  --warn: #efbd88;
+  --bad: #ffb8aa;
+  --anom: #ddb075;
+  --skill: #d5a9d2;
+  --on-series: #15141a;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f5f0;
+  --surface: #fff;
+  --surface-2: #f9f8f4;
+  --surface-3: #eeebe4;
+  --surface-4: #e6e2d9;
+  --border: #dfdcd3;
+  --border-2: #c8c4ba;
+  --border-3: #a5a197;
+  --fg: #282622;
+  --fg-2: #45423c;
+  --muted: #5c5851;
+  --dim: #67635c;
+  --accent: #63547f;
+  --accent-2: #466482;
+  --mcp: #326866;
+  --ok: #386449;
+  --warn: #79501b;
+  --bad: #963830;
+  --anom: #865024;
+  --skill: #754f74;
+  --on-series: #fff;
+}
+
+/* The reference assigns these derived colors separately in each edition. */
+:root, :root[data-theme="light"] {
+  --display: "Workbench Inter", Inter, "Segoe UI", system-ui, sans-serif;
+  --sans: var(--display);
+  --mono: "IBM Plex Mono", Consolas, monospace;
+  --bg-glow-1: radial-gradient(1400px 700px at 80% -15%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 55%);
+  --bg-glow-2: radial-gradient(1000px 600px at -5% 110%, color-mix(in srgb, var(--accent-2) 5%, transparent), transparent 60%);
+  --bg-glow-3: radial-gradient(800px 500px at 50% 50%, color-mix(in srgb, var(--mcp) 2%, transparent), transparent 70%);
+  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --mcp-grad: linear-gradient(135deg, var(--mcp), var(--accent-2));
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --mcp-soft: color-mix(in srgb, var(--mcp) 12%, transparent);
+  --ok-soft: color-mix(in srgb, var(--ok) 12%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
+  --bad-soft: color-mix(in srgb, var(--bad) 12%, transparent);
+  --anom-soft: color-mix(in srgb, var(--anom) 12%, transparent);
+  accent-color: var(--accent);
+}
+
+body {
+  font-family: var(--sans);
+}
+
+.brand-mark {
+  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.mcp-icon {
+  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--mcp) 28%, transparent);
+}
+.brand-mark svg, .mcp-icon svg, .replay-segment {
+  color: var(--on-series);
+}
+.replay-segment.skill {
+  background-color: var(--skill);
+}
+.callout code {
+  background-color: var(--warn-soft);
+}
