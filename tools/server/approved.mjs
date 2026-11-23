@@ -1,5 +1,6 @@
 import { isAbsolute } from 'node:path';
 import { createLocalCatalog } from '../workbench/local-catalog.mjs';
+import { createApprovedPersonal } from './approved-personal.mjs';
 import { callServiceAsync } from './service-client.mjs';
 
 export async function createApprovedAdapter(consumerDir) {
@@ -9,6 +10,10 @@ export async function createApprovedAdapter(consumerDir) {
   const items = new Map(published.items.map(item => [item.id, item]));
   const toolConsumer = process.env.AIH_APPROVED_TOOL_CONSUMER ?? consumerDir;
   let planner;
+  const catalogPlanner = () => planner ??= isAbsolute(toolConsumer)
+    ? createLocalCatalog(consumerDir, undefined, toolConsumer).catch(() => null) : Promise.resolve(null);
+  const personal = createApprovedPersonal({ consumer: consumerDir, catalog: catalogPlanner,
+    sourceConsumer: toolConsumer, project: process.env.AIH_CONSUMER_PROJECT });
   const catalog = { ...published, items: published.items.map(({ scanKey, ...item }) => item) };
   const reply = (response, status, value) => response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store',
@@ -18,8 +23,9 @@ export async function createApprovedAdapter(consumerDir) {
     close() {},
     async handle(request, response, pathname) {
       const importing = pathname === '/api/repository-scan-import';
+      const personalPath = ['/api/approved-personal', '/api/approved-personal-prepare', '/api/approved-personal-apply'].includes(pathname);
       if (pathname !== '/api/repository-scan' && pathname !== '/api/approved-evidence' &&
-        pathname !== '/api/approved-tool-plan' && !importing && !pathname.startsWith('/api/authoring-')) return false;
+        pathname !== '/api/approved-tool-plan' && !importing && !personalPath && !pathname.startsWith('/api/authoring-')) return false;
       const host = request.headers.host;
       if (![`127.0.0.1:${request.socket.localPort}`, `localhost:${request.socket.localPort}`].includes(host) ||
         request.headers['sec-fetch-site'] === 'cross-site' ||
@@ -27,7 +33,11 @@ export async function createApprovedAdapter(consumerDir) {
         reply(response, 403, { status: 'refused', reason: 'Same-origin Workbench request required.' });
         return true;
       }
-      if (pathname === '/api/repository-scan' || importing) {
+      if (pathname === '/api/approved-personal' && request.method === 'GET') {
+        reply(response, 200, personal.status());
+        return true;
+      }
+      if (pathname === '/api/repository-scan' || importing || personalPath) {
         if (request.method !== 'POST' || request.headers['content-type'] !== 'application/json') {
           reply(response, 405, { reason: 'Submit a JSON request from the Workbench.' });
           return true;
@@ -57,6 +67,23 @@ export async function createApprovedAdapter(consumerDir) {
             result.ok ? result : { reason: 'The public Scan reader could not open this report.' });
           return true;
         }
+        if (personalPath) {
+          const session = request.headers['x-aih-client'];
+          if (typeof session !== 'string' || !/^[a-f0-9-]{36}$/.test(session)) {
+            reply(response, 400, { status: 'invalid', reason: 'Open a current Workbench review session.' });
+            return true;
+          }
+          if (pathname === '/api/approved-personal-prepare') {
+            const ids = input?.items;
+            const selection = Array.isArray(ids) ? ids.map(id => items.get(id)) : [];
+            if (!selection.length || selection.length > 64 || new Set(ids).size !== ids.length || selection.some(item => !item)) {
+              reply(response, 400, { status: 'invalid', reason: 'Choose exact items from the current Catalog.' });
+            } else reply(response, 200, await personal.prepare({ items: selection, client: input.client, binding: input.binding, session }));
+          } else if (pathname === '/api/approved-personal-apply') {
+            reply(response, 200, await personal.apply({ id: input?.id, reviewDigest: input?.reviewDigest, confirmed: input?.confirmed, session }));
+          } else reply(response, 405, { status: 'invalid', reason: 'Choose a personal setup operation.' });
+          return true;
+        }
         const folder = input?.folder;
         if (typeof folder !== 'string' || !folder.trim()) reply(response, 400, {reason:'Enter a folder path.'});
         else {
@@ -76,8 +103,7 @@ export async function createApprovedAdapter(consumerDir) {
           reply(response, 400, { status: 'unavailable', reason: 'Select exact Tool Setup recipes from this Catalog.' });
           return true;
         }
-        planner ??= isAbsolute(toolConsumer) ? createLocalCatalog(consumerDir, undefined, toolConsumer).catch(() => null) : Promise.resolve(null);
-        const source = await planner;
+        const source = await catalogPlanner();
         if (!source) {
           reply(response, 409, { status: 'unavailable', reason: 'A prepared consumer with pinned Catalog recipe inputs is required to preview tool setup.' });
           return true;

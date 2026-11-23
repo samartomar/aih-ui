@@ -1,10 +1,12 @@
 import {checkedFiles, sourceFiles} from './source-files.js';
 import { action, checkbox, download, downloadJson, facts, field, fileField, hint, input, link, node, section } from './dom.js';
 import { repositoryScan } from './repository-scan.js';
+import { renderVersionSets, versionUnavailable } from './versions.js';
 import { renderCatalog } from './catalog.js';
 import { showEnterprisePolicy, reviewTeamSelection } from './organization.js';
 import { renderToolSetup } from './tool-setup.js';
 import { renderScan } from './scan.js';
+import { personalPreparation } from './personal.js';
 
 const personalSteps = [
   ['clients', 'CLI targets', 'Choose the clients and a base for each.'],
@@ -37,7 +39,7 @@ export function stepsFor(role) {
 
 const draftFormat = 'aih-workbench-setup/1';
 export const emptyDraft = () => ({
-  format: draftFormat, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, reviewed: '',
+  format: draftFormat, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
 });
 
 function cleanDraft(value) {
@@ -142,9 +144,15 @@ function plan(host, api) {
     ['Tool Setup platform', draft.toolPlatform],
     ['Unavailable selections', selected.length === draft.items.length ? null : String(draft.items.length - selected.length)],
     ['First task', draft.firstTask || null],
-    ['Personal files and supporting instructions', draft.source || draft.instructions ? 'Recorded in the setup file' : 'None'],
+    ['Supporting files', draft.files.map(file => file.name).join(', ') || 'None'],
+    ['Source and instructions', draft.source || draft.instructions ? 'Recorded in the setup file' : 'None'],
   ]));
   const output = node('div', null, 'ix-stack');
+  if (role === 'individual' && data.hostMode === 'read-only') {
+    host.append(details);
+    personalPreparation(host, api, selected.length === draft.items.length ? selected : [], eligibleClients);
+    return;
+  }
   output.setAttribute('role', 'status');
   const preview = action('Check Catalog selection', async () => {
     preview.disabled = true;
@@ -175,6 +183,11 @@ function plan(host, api) {
 
 export function renderJourney(host, step, api) {
   const { draft, data, role, change } = api;
+  if (role === 'admin' && step !== 'versions' && step !== 'org' && versionUnavailable(draft.versions, data)) {
+    host.append(section('Version set unavailable', hint('This draft refers to a version set that is not installed.'),
+      link('Choose installed versions', api.route('versions'))));
+    return;
+  }
   if (step === 'start') {
     if (role === 'enterprise') showEnterprisePolicy(host, api);
     else host.append(section('Start a personal setup',
@@ -187,20 +200,7 @@ export function renderJourney(host, step, api) {
       field('Policy owner', input(draft.owner, value => change('owner', value))),
       section('CLI targets', clients(api))));
   } else if (step === 'versions') {
-    const entries = Object.entries(data.packages ?? {}).flatMap(([name, value]) => {
-      const version = typeof value === 'string' ? value : value?.version;
-      return version ? [[name, version]] : [];
-    });
-    const supported = entries.filter(([name]) => ['core', 'catalog', 'scan'].includes(name));
-    const pin = action('Pin installed versions', () => {
-      change('versions', Object.fromEntries(supported));
-      api.refresh();
-      api.status('Installed versions pinned in this draft.');
-    }, true);
-    pin.disabled = !supported.length;
-    host.append(section('Installed package versions', supported.length ? facts(supported) : hint('No installed package versions were supplied.'),
-      section('Draft version pins', Object.keys(draft.versions).length ? facts(Object.entries(draft.versions)) : hint('No versions pinned.'), pin)),
-      section('Catalog sources', data.frameworks.length ? facts(data.frameworks.map(f => [f.name, f.sha256 ?? f.state])) : hint(data.gaps.catalog ?? 'No sources are configured.')));
+    renderVersionSets(host, api);
   } else if (step === 'clients') {
     host.append(...targets(api));
   } else if (step === 'content' || step === 'catalog') {

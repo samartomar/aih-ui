@@ -26,7 +26,7 @@ export async function cachedCatalogBytes(root,ref) {
     if (sha(bytes)===ref.sha256) return bytes;
   } catch(error) { if (error.code!=='ENOENT') throw error; }
 }
-export async function verifiedCatalogFiles(parts,{root,catalogNode,sourceCache}) {
+export async function verifiedCatalogFiles(parts,{root,catalogNode,sourceCache,allowNetwork=true}) {
   const reason=catalogInstallReason(parts);
   if (reason) throw Error(reason);
   const sources=new Map(), refs=new Map();
@@ -41,11 +41,11 @@ export async function verifiedCatalogFiles(parts,{root,catalogNode,sourceCache})
       let acquired=sources.get(source);
       if(!acquired) {
         if(sourceCache?.source?.repository===source.repository && sourceCache.source.commit===source.commit) acquired=sourceCache;
-        else {
+        else if (allowNetwork) {
           const outDir=join(root,'acquisition');
           await mkdir(outDir,{recursive:true});
           acquired=await catalogNode.fetchSource({kind:'git',repository:source.repository,ref:source.commit},{outDir,timeoutMs:60000});
-        }
+        } else throw Error('The pinned source files are unavailable in the configured local cache.');
         if(acquired.status!=='ok'||acquired.source?.repository!==source.repository||acquired.source.commit!==source.commit) throw Error('The pinned Catalog source is unavailable. No installation was prepared.');
         sources.set(source,acquired);
       }

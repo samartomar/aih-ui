@@ -1,4 +1,4 @@
-import { open } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { readProfile } from '../../src/approved/profiles.js';
 
@@ -10,6 +10,7 @@ export function createPortableProfiles(configured = process.env.AIH_WORKBENCH_PR
     if (!isAbsolute(configured)) return { status: 'unavailable', profiles: [] };
     let file;
     try {
+      if (!(await stat(configured)).isFile()) return { status: 'unavailable', profiles: [] };
       file = await open(configured);
       const info = await file.stat();
       if (!info.isFile() || info.size > LIMIT) return { status: 'unavailable', profiles: [] };
@@ -19,6 +20,7 @@ export function createPortableProfiles(configured = process.env.AIH_WORKBENCH_PR
       const values = JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
       if (!Array.isArray(values) || values.length > 100) return { status: 'unavailable', profiles: [] };
       const accepted = values.flatMap(value => {
+        if (typeof value?.id !== 'string' || !value.id.trim()) return [];
         try { return [readProfile(value)]; } catch { return []; }
       });
       return { status: accepted.length === values.length ? 'ready' : 'partial', profiles: accepted };

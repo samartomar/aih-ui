@@ -45,7 +45,9 @@ export function renderToolSetup(host, api) {
   const guide = checkbox('Include AIH Guides', draft.guides !== 'excluded',
     checked => change('guides', checked ? 'included' : 'excluded'));
   const guides = section('Guides and supporting instructions', guide,
-    field('Supporting instructions', input(draft.instructions, value => change('instructions', value), true)));
+    field('Supporting instructions', input(draft.instructions, value => change('instructions', value), true)),
+    checkbox('Allow suggested updates to these instructions', draft.instructionUpdates === 'allowed',
+      checked => change('instructionUpdates', checked ? 'allowed' : 'review')));
   host.append(guides);
 
   const recipes = selectedToolRecipes(data.items);

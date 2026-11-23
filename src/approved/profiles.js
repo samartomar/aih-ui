@@ -42,6 +42,7 @@ function put(profile, key = libraryKey) {
 }
 
 export function renderProfiles(host, api) {
+  const personalKey = api.role === 'individual' ? libraryKey : libraryKey + ':' + api.role;
   const shelf = node('ul', null, 'ix-profile-grid');
   const inspector = section(null);
   const sources = new Map([['saved', 'Saved in this browser'], ['shared', 'Shared in this browser'], ['host', 'Host library']]);
@@ -55,7 +56,7 @@ export function renderProfiles(host, api) {
 
   function showShelf() {
     const collections = [
-      ['saved', library()],
+      ['saved', library(personalKey)],
       ['shared', library(sharedKey)],
       ['host', hostLibrary],
     ];
@@ -157,7 +158,7 @@ export function renderProfiles(host, api) {
       action('Save Profile', () => {
         draft.name = draft.name.trim();
         if (!draft.name) { name.focus(); api.status('Enter a Profile name.'); return; }
-        if (!put(draft)) { api.status('The browser could not save this Profile.'); return; }
+        if (!put(draft, personalKey)) { api.status('The browser could not save this Profile.'); return; }
         selected = 'saved:' + draft.id;
         filter.value = 'saved';
         showShelf();
@@ -172,14 +173,18 @@ export function renderProfiles(host, api) {
     fileField('Import Profile', '.json,application/json', async file => {
       if (file.size > 1024 * 1024) throw new Error('Choose a Profile smaller than 1 MB.');
       const profile = readProfile(JSON.parse(await file.text()));
-      if (library().some(entry => entry.id === profile.id)) profile.id = crypto.randomUUID();
-      if (!put(profile)) throw new Error('The browser could not save this Profile.');
+      if (library(personalKey).some(entry => entry.id === profile.id)) profile.id = crypto.randomUUID();
+      if (!put(profile, personalKey)) throw new Error('The browser could not save this Profile.');
       selected = 'saved:' + profile.id;
       filter.value = 'saved';
       showShelf();
       preview(profile);
     }, api.status));
-  filter.addEventListener('change', showShelf);
+  filter.addEventListener('change', () => {
+    selected = null;
+    inspector.replaceChildren();
+    showShelf();
+  });
   host.append(section(null, controls, field('Profile source', filter), privateNote, shelf), inspector);
   showShelf();
   fetch('/api/approved-profiles', { signal: api.signal }).then(async response => {

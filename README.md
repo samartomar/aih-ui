@@ -10,6 +10,10 @@ With the content-document Catalog reader, the host reads the bundled AIH content
 
 An organization selection shared in this browser is available to the Enterprise User on the same origin. Export a copy for transfer. The local selection and Profile files contain Workbench choices. A native installation or centrally published policy requires its own Core result or organization service receipt.
 
+Set `AIH_WORKBENCH_PROFILES` to an absolute JSON file containing portable Profiles to offer them through the host's read-only Profile library. Individuals can also share Profiles in this browser or export them.
+
+For an Individual User project installation, configure `AIH_CONSUMER_PROJECT` with the intended local folder and supply the prepared Catalog consumer with its verified source cache. The user confirms the target, reviews the Core plan, and approves the exact reviewed changes. The result includes the subsequent Core file check. The host can run a disposable acceptance check with `node tools/check-approved-personal.mjs <prepared-consumer>`.
+
 ## What this repo owns
 
 - The screens, interaction and presentation of the Policy Workbench.

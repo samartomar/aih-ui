@@ -138,6 +138,12 @@ export function showEnterprisePolicy(host, api) {
       ['CLI targets', String(published.selection.clients.length)],
       ['Catalog items', String(published.selection.items.length)],
     ]));
+    for (const file of published.selection.files) {
+      const details = node('details');
+      details.append(node('summary', file.name), node('pre', file.text),
+        hint(file.allowUpdates ? 'Updates permitted by the owner.' : 'Owner review required for updates.'));
+      output.append(details);
+    }
     for (const issue of checkSelection(published.selection, fullData)) output.append(hint(issue));
   } else {
     output.append(hint('There is no organization selection available in this browser.'));

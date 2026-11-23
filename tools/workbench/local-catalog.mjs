@@ -251,5 +251,14 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     return { ...planTools(ids, client, cell), source: toolData.source,
       recipe: ids.length === toolCombination.members.length && toolCombination.members.every(id => ids.includes(id)) ? toolCombination.id : null };
   }
-  return { catalog, evidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools };
+  function prepareSelection(items, client) {
+    const ids = items.map(({ id, itemId }) => {
+      const entry = byId.get(itemId)?.entry;
+      const framework = frameworks.find(value => value.id === entry?.framework);
+      if (!entry || id !== `${framework?.sha256}/${itemId}`) throw invalid('The exact item is unavailable from the prepared Catalog source.');
+      return itemId;
+    });
+    return catalogPreview(ids, client);
+  }
+  return { catalog, evidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools, prepareSelection };
 }
