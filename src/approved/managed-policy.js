@@ -1,4 +1,5 @@
 import { action, downloadJson, facts, fileField, hint, link, node, readStored, section, store } from './dom.js';
+import { renderGitHubRecovery, teamProfileRequest, canRetryProposal } from './profile-sharing.js';
 
 const endpoint = '/api/enterprise/github/';
 let configuration = {status:'loading'};
@@ -44,14 +45,14 @@ export function refreshPolicy() {
       if (!result.selection || !result.source?.commitSha) throw Error(result.reason || 'No merged organization policy is available.');
       const historyKey='aih-member-policy-seen:'+JSON.stringify(configuration.destination);
       const old=policy || readStored(historyKey,null);
-      policy = {selection:result.selection,revision:result.source.commitSha,source:result.source,origin:'Trusted GitHub repository'};
+      policy = {selection:result.selection,revision:result.source.commitSha,source:result.source,origin:'Administrator-configured GitHub branch'};
       store(historyKey,{revision:policy.revision,selection:{items:policy.selection.items,clients:policy.selection.clients}});
       if (old && Array.isArray(old.selection?.items) && Array.isArray(old.selection.clients) && old.revision !== policy.revision) {
         const before = new Set(old.selection.items), after = new Set(policy.selection.items);
         difference = {before:old.revision, added:[...after].filter(id=>!before.has(id)), removed:[...before].filter(id=>!after.has(id)),
           previousClients:old.selection.clients.join(', '), currentClients:policy.selection.clients.join(', ')};
       }
-      message = handoff && handoff.commit !== policy.revision ? 'The trusted branch has advanced since this handoff. Review the current policy.' : '';
+      message = handoff && handoff.commit !== policy.revision ? 'The configured branch currently points to a different commit than this handoff. Review the current policy.' : '';
     } catch (error) {policy = undefined;difference = undefined;message = error.message;}
     finally {pending = undefined;}
   })();
@@ -139,45 +140,85 @@ export function publishPolicy(host, api, selection, reviewed) {
   }
   const key='aih-policy-pr:'+JSON.stringify([dest.repository,dest.baseBranch,dest.policyPath]);
   const output=node('div',null,'ix-stack');
-  const showError=error=>output.replaceChildren(hint(error.message));
-  async function status(receipt) {
-    const checked=await request('status',{receipt});
-    draw(checked.receipt);
+  const proposal=node('div',null,'ix-stack');
+  const proposalNotice=hint('');
+  const receiptNotice=hint('');
+  proposalNotice.setAttribute('role','status');
+  receiptNotice.setAttribute('role','status');
+  let shownReceipt;
+  async function status(receipt, button) {
+    if(button) button.disabled=true;
+    receiptNotice.textContent='Checking publication status…';
+    try {
+      const checked=await teamProfileRequest('/status',api.signal,{receipt});
+      if(shownReceipt === receipt) { draw(checked.receipt); receiptNotice.textContent=''; }
+    } catch(error) {
+      if(!api.signal.aborted && shownReceipt === receipt) receiptNotice.textContent=error.message;
+    } finally {
+      if(button) button.disabled=false;
+    }
   }
-  function draw(receipt) {
+  function draw(receipt, verified=true) {
     if(!receipt || !Number.isSafeInteger(receipt.number)) throw Error('GitHub did not return a publication receipt.');
-    store(key,receipt);
-    output.replaceChildren(node('h3',({pending:'Awaiting merge',merged:'Published',closed:'Closed without publication',changed:'Pull request changed'})[receipt.status] || 'Check publication status'));
+    shownReceipt=receipt;
+    if(verified) store(key,receipt);
+    output.replaceChildren(node('h3',(verified && ({pending:'Awaiting merge',merged:'Published',closed:'Closed without publication',changed:'Pull request changed'})[receipt.status]) || 'Check publication status'));
     output.append(link('Open pull request #'+receipt.number,'https://github.com/'+dest.repository+'/pull/'+Number(receipt.number)));
-    if(receipt.status==='merged' && /^[a-f0-9]{40}$/.test(receipt.mergeCommitSha)) {
+    if(verified && receipt.status==='merged' && /^[a-f0-9]{40}$/.test(receipt.mergeCommitSha)) {
       const url=handoffLink(receipt,dest);
       output.append(facts([['Published commit',receipt.mergeCommitSha]]),link('Open member handoff',url),
         action('Download member handoff',()=>downloadJson('workbench-handoff.json',{format:'aih-member-handoff/1',repository:dest.repository,
           branch:dest.baseBranch,path:dest.policyPath,commit:receipt.mergeCommitSha})),
         action('Copy member handoff link',async()=>{try {await navigator.clipboard.writeText(url);api.status('Member handoff link copied.');} catch {output.append(hint(url));}}));
-    } else output.append(action('Refresh publication status',()=>status(receipt).catch(showError)));
+    } else output.append(action('Refresh publication status',event=>status(receipt,event.currentTarget)));
   }
+  let busy=false, retrying=false;
   const preview=action('Preview policy pull request',async()=>{
+    if(busy || retrying) return;
+    busy=true;
     preview.disabled=true;
+    proposal.replaceChildren();
+    proposalNotice.textContent='Checking the GitHub destination…';
     try {
-      const result=await request('preview',{kind:'policy',selection});
+      const result=await teamProfileRequest('/preview',api.signal,{kind:'policy',selection});
       if(!result.confirmationId) throw Error(result.reason || result.error || 'The policy could not be prepared.');
-      const notice=hint('');
       const confirm=action('Create policy pull request',async()=>{
+        if(busy) return;
+        busy=true;
         confirm.disabled=true;
-        try {const created=await request('propose',{confirmationId:result.confirmationId,confirmed:true});draw(created.receipt);}
-        catch(error){notice.textContent=error.message;confirm.disabled=false;}
+        preview.disabled=true;
+        proposalNotice.textContent='Opening the pull request…';
+        try {
+          const created=await teamProfileRequest('/propose',api.signal,{confirmationId:result.confirmationId,confirmed:true});
+          draw(created.receipt);
+          receiptNotice.textContent='';
+          proposal.replaceChildren();
+          proposalNotice.textContent='Pull request opened.';
+          retrying=false;
+        } catch(error) {
+          if(!api.signal.aborted) {
+            proposalNotice.textContent=error.message;
+            retrying=canRetryProposal(error);
+            confirm.disabled=!retrying;
+            confirm.textContent='Retry this pull request';
+          }
+        } finally {
+          busy=false;
+          preview.disabled=retrying;
+        }
       },true);
       const document=node('details');
       document.append(node('summary','Review the exact policy file'),node('pre',result.content));
-      output.replaceChildren(facts([['GitHub account',result.identity?.login],['Repository',result.target.repository],['Branch',result.target.baseBranch],
-        ['File',result.target.path],['Base commit',result.target.baseSha],['Document digest',result.digest]]),document,confirm,notice);
-    } catch(error){showError(error);} finally{preview.disabled=false;}
+      proposal.replaceChildren(facts([['GitHub account',result.identity?.login],['Repository',result.target.repository],['Branch',result.target.baseBranch],
+        ['File',result.target.path],['Base commit',result.target.baseSha],['Document digest',result.digest]]),document,confirm);
+      proposalNotice.textContent='';
+    } catch(error){if(!api.signal.aborted) proposalNotice.textContent=error.message;} finally{busy=false;preview.disabled=false;}
   },true);
   preview.disabled=!reviewed || !configuration.canPropose;
   if(!configuration.canPropose) pane.append(hint('Your current GitHub account needs repository write access to open a publication pull request.'));
-  pane.append(facts([['GitHub account',configuration.identity?.login],['Repository',dest.repository],['Branch',dest.baseBranch],['Policy file',dest.policyPath]]),preview,output);
+  pane.append(facts([['GitHub account',configuration.identity?.login],['Repository',dest.repository],['Branch',dest.baseBranch],['Policy file',dest.policyPath]]),
+    preview,proposal,proposalNotice,output,receiptNotice,renderGitHubRecovery('policy',api.signal,receipt=>{draw(receipt);void status(receipt);}));
   if(!reviewed) pane.append(hint('Record a review of this draft before opening a pull request.'));
   const receipt=readStored(key,null);
-  if(receipt) status(receipt).catch(showError);
+  if(Number.isSafeInteger(receipt?.number)) { draw(receipt,false); void status(receipt); }
 }

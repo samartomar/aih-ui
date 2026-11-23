@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createEnterpriseGithub } from '../server/enterprise-github.mjs';
@@ -35,7 +35,7 @@ function fakeGithub() {
     assert.ok(endpoint.startsWith(prefix));
     const [route, query] = endpoint.slice(prefix.length).split('?');
     if (method === 'POST') writes.push({ route, data });
-    if (!route) return { full_name: config.repository, permissions: { push: true } };
+    if (!route) return { full_name: config.repository, permissions: { push: state.push !== false } };
     if (route === '/git/ref/heads/main') return makeRef('main', state.base);
     if (route.startsWith('/git/ref/heads/')) return state.branch ?? absent();
     if (route === '/git/refs' && method === 'POST') {
@@ -282,6 +282,11 @@ test('recovery preserves a modified or deleted branch', async t => {
   const writes = github.writes.length;
   const reopened = await openHost(t, github, { recoveryDirectory });
   github.state.failPrBeforeWrite = false;
+  github.state.push = false;
+  const permission = await reopened.call('propose', confirm);
+  assert.equal(permission.code, 403);
+  assert.equal(permission.body.recovery.status, 'branch-ready');
+  github.state.push = true;
   github.state.branch.object.sha = changedSha;
   const moved = await reopened.call('propose', confirm);
   assert.equal(moved.code, 409);
@@ -312,4 +317,23 @@ test('a retargeted pull request cannot create a second proposal on recovery', as
   assert.equal(retargeted.code, 409);
   assert.equal(retargeted.body.recovery.status, 'branch-ready');
   assert.equal(github.writes.length, writes);
+});
+
+test('GitHub cannot receive a branch write before the local recovery record saves', async t => {
+  const github = fakeGithub();
+  const home = await mkdtemp(join(tmpdir(), 'aih-github-recovery-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const recoveryDirectory = join(home, 'recovery');
+  await writeFile(recoveryDirectory, 'The host directory is unavailable.');
+  const host = await openHost(t, github, { recoveryDirectory });
+  const { body: preview } = await host.call('preview', { kind: 'policy', selection: ['one'] });
+  const confirm = { confirmationId: preview.confirmationId, confirmed: true };
+  const unavailable = await host.call('propose', confirm);
+  assert.equal(unavailable.code, 503);
+  assert.match(unavailable.body.error, /local recovery record/);
+  assert.deepEqual(github.writes.map(write => write.route), ['/git/blobs', '/git/trees', '/git/commits']);
+  await unlink(recoveryDirectory);
+  const completed = await host.call('propose', confirm);
+  assert.equal(completed.code, 200);
+  assert.deepEqual(github.writes.map(write => write.route), ['/git/blobs', '/git/trees', '/git/commits', '/git/refs', '/pulls']);
 });

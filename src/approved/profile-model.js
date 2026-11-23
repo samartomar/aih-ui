@@ -55,7 +55,9 @@ export function resolveProfileChoices(profile, data, allowed = data) {
     const exact = data.items.find(item => item.id === id);
     const matching = exact ? [] : data.items.filter(item => item.itemId === id);
     const item = exact ?? (matching.length === 1 ? matching[0] : undefined);
-    return { id, value: item && allowedItems.has(item.id) ? item : undefined };
+    const eligible = item && allowedItems.has(item.id) && (!allowed.itemClients ||
+      profile.clients.every(client => allowed.itemClients[item.id]?.includes(client)));
+    return { id, value: eligible ? item : undefined };
   });
   const clients = profile.clients.map(id => ({
     id, value: allowedClients.has(id) ? data.clients.find(client => client.id === id) : undefined,

@@ -10,8 +10,15 @@ export async function teamProfileRequest(path, signal, body) {
     ...(body && { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   });
   const result = await response.json();
-  if (!response.ok) throw Object.assign(new Error(result.error || 'The GitHub connection is unavailable.'), { recovery: result.recovery });
+  if (!response.ok) throw Object.assign(new Error(result.error || 'The GitHub connection is unavailable.'), {
+    recovery: result.recovery, status: response.status,
+  });
   return result;
+}
+
+export function canRetryProposal(error) {
+  if (error.recovery) return !['branch-changed', 'branch-missing'].includes(error.recovery.status);
+  return !error.status || error.status >= 500 || error.message === 'This GitHub proposal is already in progress.';
 }
 
 export function renderGitHubRecovery(kind, signal, onReceipt) {
@@ -29,6 +36,7 @@ export function renderGitHubRecovery(kind, signal, onReceipt) {
     notice.textContent = 'Checking saved proposals…';
     try {
       const result = await teamProfileRequest('/recovery', signal);
+      if (result.status !== 'ready') throw new Error('GitHub proposal recovery is unavailable on this host.');
       const proposals = result.proposals.filter(proposal => proposal.kind === kind);
       output.replaceChildren(...proposals.map(renderProposal));
       notice.textContent = proposals.length ? '' : 'No saved proposals for this account.';
@@ -41,9 +49,8 @@ export function renderGitHubRecovery(kind, signal, onReceipt) {
   function renderProposal(proposal) {
     const { target, identity, digest, status, receipt } = proposal;
     const row = node('div', null, 'ix-stack');
-    const message = hint('');
-    message.setAttribute('role', 'status');
-    const resume = action('Resume reviewed proposal', async () => {
+    const needsRestore = status === 'branch-changed' || status === 'branch-missing';
+    const resume = action(needsRestore ? 'Check restored branch and resume' : 'Resume reviewed proposal', async () => {
       resume.disabled = true;
       try {
         const result = await teamProfileRequest('/propose', signal, { confirmationId: proposal.confirmationId, confirmed: true });
@@ -63,9 +70,9 @@ export function renderGitHubRecovery(kind, signal, onReceipt) {
       ['Base branch', target.baseBranch], ['Base commit', target.baseSha], ['File', target.path], ['SHA-256', digest],
     ]));
     if (proposal.headCommitUrl) row.append(link('Open proposal commit', proposal.headCommitUrl));
-    if (status === 'branch-ready' && proposal.branchUrl) row.append(link('Open proposal branch', proposal.branchUrl));
+    if (['branch-ready', 'branch-changed'].includes(status) && proposal.branchUrl) row.append(link('Open proposal branch', proposal.branchUrl));
     if (receipt) row.append(action('Show pull request receipt', () => onReceipt(receipt)));
-    else if (!['branch-changed', 'branch-missing'].includes(status)) row.append(resume, message);
+    else row.append(resume);
     return row;
   }
   const refresh = action('Check saved GitHub proposals', load);
@@ -186,7 +193,7 @@ export function renderProfileSharing(host, { profile, choices, destination, sign
         } catch (error) {
           if (!signal.aborted) {
             output.textContent = error.message;
-            retrying = !['branch-changed', 'branch-missing'].includes(error.recovery?.status);
+            retrying = canRetryProposal(error);
             confirm.disabled = !retrying;
             confirm.textContent = 'Retry this pull request';
           }

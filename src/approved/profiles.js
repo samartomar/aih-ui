@@ -1,7 +1,7 @@
 import { action, checkbox, facts, field, fileField, hint, input, link, node, section, readStored, store } from './dom.js';
 import { make as icon } from './icons.js';
 import { format, readProfile, readTeamProfile, resolveProfileChoices } from './profile-model.js';
-import { loadPublicProfile, profileLimit, profileText, renderProfileSharing, teamProfileRequest } from './profile-sharing.js';
+import { loadPublicProfile, profileLimit, profileText, renderGitHubRecovery, renderProfileSharing, teamProfileRequest } from './profile-sharing.js';
 
 export { readProfile, readTeamProfile } from './profile-model.js';
 
@@ -257,7 +257,8 @@ export function renderProfiles(host, api) {
     inspector.replaceChildren();
     showShelf();
   });
-  host.append(section(null, controls, publicImport, field('Profile source', filter), teamReceipt, shelf), inspector);
+  host.append(section(null, controls, publicImport, field('Profile source', filter), teamReceipt,
+    ...(sources.has('team') ? [renderGitHubRecovery('profile', api.signal, showProposal)] : []), shelf), inspector);
   showShelf();
   if (sources.has('team')) refreshTeam.click();
   fetch('/api/approved-profiles', { signal: api.signal }).then(async response => {

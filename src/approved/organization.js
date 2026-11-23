@@ -73,7 +73,8 @@ export function restrictEnterprise(data, published) {
   const items = data.items.filter(item => choices.has(item.id));
   const frameworks = new Set(items.map(item => item.framework));
   return {
-    ...data, items, frameworks: data.frameworks.filter(entry => frameworks.has(entry.id)),
+    ...data, items, itemClients: published?.source ? allowed.itemClients ?? {} : undefined,
+    frameworks: data.frameworks.filter(entry => frameworks.has(entry.id)),
     clients: data.clients.filter(client => allowed.clients.includes(client.id)),
     tools: data.tools.filter(tool => allowed.clients.includes(tool.id)),
     gaps: { ...data.gaps,
@@ -130,10 +131,13 @@ export function reviewTeamSelection(host, api, publish = false) {
     save.disabled = reviewed || problems.length > 0;
     if (reviewed) output.textContent = 'Review recorded for this draft.';
   }
-  buttons.append(save, action('Export selection', () => downloadJson('workbench-team-selection.json', current)));
-  host.append(section(publish ? 'Local organization selection' : 'Review the organization selection', info,
-    hint('This selection controls what the Enterprise User can choose in this browser. Core remains the policy and execution authority.'),
-    list, buttons, output));
+  const managed = managedMode();
+  if (!publish || !managed) buttons.append(save);
+  buttons.append(action('Export selection', () => downloadJson('workbench-team-selection.json', current)));
+  host.append(section(publish ? managed ? 'Organization selection draft' : 'Local organization selection' : 'Review the organization selection', info,
+    hint(managed ? 'The administrator-configured GitHub branch supplies the member policy. Core evaluates and applies changes.' :
+      'This selection controls what the Enterprise User can choose in this browser. Core evaluates and applies changes.'),
+    list, buttons, ...(!publish || !managed ? [output] : [])));
 }
 
 export function showEnterprisePolicy(host, api) {

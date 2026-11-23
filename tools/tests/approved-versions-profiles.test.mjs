@@ -121,3 +121,12 @@ test('public Profile links require a pinned GitHub JSON file and send no credent
   assert.equal(fetch.mock.calls[0].arguments[1].credentials, 'omit');
   assert.equal(fetch.mock.calls[0].arguments[1].redirect, 'error');
 });
+
+test('a managed Profile with mixed CLI eligibility keeps an incompatible item unavailable', async () => {
+  const {resolveProfileChoices} = await import('../../src/approved/profile-model.js');
+  const data = {items:[{id:'a/skill'}], clients:[{id:'claude-code'}, {id:'codex'}]};
+  const allowed = {...data, itemClients:{'a/skill':['claude-code']}};
+  const profile = {items:['a/skill'], clients:['claude-code','codex']};
+  assert.equal(resolveProfileChoices(profile, data, allowed).eligible, false);
+  assert.equal(resolveProfileChoices({...profile, clients:['claude-code']}, data, allowed).eligible, true);
+});
