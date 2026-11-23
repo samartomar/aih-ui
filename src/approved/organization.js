@@ -1,3 +1,4 @@
+import { managedMode, managedNotice, publishPolicy } from './managed-policy.js';
 import {checkedFiles} from './source-files.js';
 import { action, downloadJson, facts, fileField, hint, node, readStored, section, store } from './dom.js';
 
@@ -9,13 +10,21 @@ function matchingVersion(current, expected) {
   return typeof current === 'string' && current === expected;
 }
 
-export function checkSelection(selection, data) {
+export function checkSelection(selection, data, managed = false) {
   const issues = [];
   if (!selection.organization) issues.push('Enter an organization name.');
-  if (!selection.owner) issues.push('Enter a policy owner.');
-  if (!selection.clients.length) issues.push('Choose at least one CLI target.');
+  if (!managed && !selection.owner) issues.push('Enter a policy owner.');
+  if (!selection.clients.length) issues.push(managed
+    ? 'The published policy offers no eligible settings for the prepared CLI targets.'
+    : 'Choose at least one CLI target.');
   if (selection.clients.some(id => !data.clients.some(client => client.id === id))) issues.push('One or more CLI targets are unavailable.');
   if (selection.items.some(id => !data.items.some(item => item.id === id))) issues.push('One or more exact Catalog items are unavailable.');
+  if (managed) {
+    if (!selection.catalogPin?.repository || !/^[a-f0-9]{40}$/.test(selection.catalogPin?.commit ?? '')) {
+      issues.push('The managed policy has no verified Catalog data pin.');
+    }
+    return issues;
+  }
   for (const [name, version] of Object.entries(selection.versions)) {
     if (!matchingVersion(data.packages?.[name]?.version, version)) issues.push('The installed ' + name + ' version does not match this selection.');
   }
@@ -36,13 +45,13 @@ function normalize(value) {
   }
   return {
     format, organization: value.organization.trim(), owner: value.owner.trim(),
-    source: value.source.trim(), files: checkedFiles(value.files), clients: [...new Set(value.clients)],
+    allowPersonal:value.allowPersonal === true, source: value.source.trim(), files: checkedFiles(value.files), clients: [...new Set(value.clients)],
     items: [...new Set(value.items)], versions: { ...value.versions },
   };
 }
 
 export function selectionFor(draft) {
-  return normalize({ format, organization: draft.organization, owner: draft.owner, source: draft.source, files: draft.files,
+  return normalize({ format, organization: draft.organization, owner: draft.owner, source: draft.source, files: draft.files, allowPersonal:draft.allowPersonal === true,
     clients: draft.clients, items: draft.items, versions: draft.versions });
 }
 
@@ -58,13 +67,14 @@ export function publishedSelection() {
 }
 
 export function restrictEnterprise(data, published) {
-  const checked = published && checkSelection(published.selection, data).length === 0;
+  const checked = published && checkSelection(published.selection, data, Boolean(published.source)).length === 0;
   const allowed = checked ? published.selection : { clients: [], items: [] };
   const choices = new Set(allowed.items);
   const items = data.items.filter(item => choices.has(item.id));
   const frameworks = new Set(items.map(item => item.framework));
   return {
-    ...data, items, frameworks: data.frameworks.filter(entry => frameworks.has(entry.id)),
+    ...data, items, itemClients: published?.source ? allowed.itemClients ?? {} : undefined,
+    frameworks: data.frameworks.filter(entry => frameworks.has(entry.id)),
     clients: data.clients.filter(client => allowed.clients.includes(client.id)),
     tools: data.tools.filter(tool => allowed.clients.includes(tool.id)),
     gaps: { ...data.gaps,
@@ -79,12 +89,13 @@ export function reviewTeamSelection(host, api, publish = false) {
   const problems = checkSelection(current, api.data);
   const review = JSON.stringify(current);
   const reviewed = api.draft.reviewed === review;
+  if (publish) publishPolicy(host, api, current, reviewed && !problems.length);
   const latest = publishedSelection();
   const output = node('p', null, 'ix-hint');
   output.setAttribute('role', 'status');
   const info = facts([
     ['Organization', current.organization || 'Required'],
-    ['Policy owner', current.owner || 'Required'],
+    ['Policy owner (draft)', current.owner || 'Required'],
     ['CLI targets', String(current.clients.length)],
     ['Exact Catalog items', String(current.items.length)],
     ['Supporting files shared with members', current.files.map(file=>file.name).join(', ') || 'None'],
@@ -120,20 +131,28 @@ export function reviewTeamSelection(host, api, publish = false) {
     save.disabled = reviewed || problems.length > 0;
     if (reviewed) output.textContent = 'Review recorded for this draft.';
   }
-  buttons.append(save, action('Export selection', () => downloadJson('workbench-team-selection.json', current)));
-  host.append(section(publish ? 'Local organization selection' : 'Review the organization selection', info,
-    hint('This selection controls what the Enterprise User can choose in this browser. Core remains the policy and execution authority.'),
-    list, buttons, output));
+  const managed = managedMode();
+  if (!publish || !managed) buttons.append(save);
+  buttons.append(action('Export selection', () => downloadJson('workbench-team-selection.json', current)));
+  host.append(section(publish ? managed ? 'Organization selection draft' : 'Local organization selection' : 'Review the organization selection', info,
+    hint(managed ? 'The administrator-configured GitHub branch supplies the member policy. Core evaluates and applies changes.' :
+      'This selection controls what the Enterprise User can choose in this browser. Core evaluates and applies changes.'),
+    list, buttons, ...(!publish || !managed ? [output] : [])));
 }
 
 export function showEnterprisePolicy(host, api) {
   const { published, fullData } = api;
   const output = section('Organization selection');
+  if (managedMode()) managedNotice(host, api);
   if (published) {
     output.append(facts([
-      ['Organization', published.selection.organization],
-      ['Policy owner', published.selection.owner],
-      ['Local revision', published.revision],
+      [published.source ? 'Organization policy ID' : 'Organization', published.selection.organization],
+      ['Policy owner', published.source ? 'Unrecorded in the published policy' : published.selection.owner],
+      ['GitHub repository owner', published.source?.repository?.split('/')[0]],
+      ['Published Catalog repository', published.selection.catalogPin?.repository],
+      ['Published Catalog data commit', published.selection.catalogPin?.commit],
+      ['Package version pins', published.source ? 'Unrecorded in the published policy' : null],
+      [published.source ? 'Published commit' : 'Local revision', published.revision],
       ['Source', published.origin],
       ['CLI targets', String(published.selection.clients.length)],
       ['Catalog items', String(published.selection.items.length)],
@@ -144,11 +163,11 @@ export function showEnterprisePolicy(host, api) {
         hint(file.allowUpdates ? 'Updates permitted by the owner.' : 'Owner review required for updates.'));
       output.append(details);
     }
-    for (const issue of checkSelection(published.selection, fullData)) output.append(hint(issue));
+    for (const issue of checkSelection(published.selection, fullData, Boolean(published.source))) output.append(hint(issue));
   } else {
     output.append(hint('There is no organization selection available in this browser.'));
   }
-  if (published?.origin === 'shared locally') {
+  if (managedMode() || published?.origin === 'shared locally') {
     host.append(output);
     return;
   }
