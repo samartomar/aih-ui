@@ -8,7 +8,25 @@ Install the pinned development dependencies with `npm ci`. Set `CORE_TGZ`, `CATA
 
 With the content-document Catalog reader, the host reads the bundled AIH content. To include other frameworks, set `AIH_APPROVED_CATALOG_CONTENT` to absolute paths to their content documents, separated by the operating system's path-list delimiter. To display recorded Scan assessments, set `AIH_APPROVED_SCAN_SUMMARIES` to the directory containing the scan-key directories. To preview published Tool Setup recipes, set `AIH_APPROVED_TOOL_CONSUMER` to the prepared consumer directory containing their pinned public inputs. The UI reports missing inputs and incomplete qualifications beside the affected choices.
 
-An organization selection shared in this browser is available to the Enterprise User on the same origin. Export a copy for transfer. The local selection and Profile files contain Workbench choices. A native installation or centrally published policy requires its own Core result or organization service receipt.
+An organization selection shared in this browser is available to the Enterprise User on the same origin. Export a copy for transfer. On a managed host, the configured GitHub repository governs Enterprise operations.
+
+### Connect an organization repository
+
+Run the local host under the intended user's GitHub CLI sign-in. An administrator configures these settings on the publishing and member hosts.
+
+| Setting | Purpose |
+|---|---|
+| `AIH_WORKBENCH_GITHUB_REPOSITORY` | Organization repository, in `owner/repo` form |
+| `AIH_WORKBENCH_GITHUB_BASE_BRANCH` | Branch that receives reviewed policy and team Profile changes |
+| `AIH_WORKBENCH_GITHUB_POLICY_PATH` | Repository-relative path for the Core organization policy JSON |
+| `AIH_WORKBENCH_GITHUB_PROFILES_DIRECTORY` | Separate repository-relative folder for team Profiles |
+| `AIH_WORKBENCH_MEMBER_URL` | Optional member Workbench address for handoff links. A portable handoff file supports members with a different address. |
+
+Review the organization draft, then open **Publish for your team**. Preview the account, destination and exact file before creating a pull request. Merge through the repository's normal review process. Refresh publication status to retrieve the verified merge commit and member handoff. Team Profiles use a separate pull request and show which personal content the author selected for sharing.
+
+Set `AIH_CONSUMER_PROJECT` on the member host to the intended project. The member reads the trusted policy with their own GitHub access, selects a permitted CLI and reviews the Core changes before applying them. Catalog files, organization files and permitted personal files have separate native reviews. An updated policy invalidates a previous review. **Check installed policy impact** reads existing project receipts.
+
+The merged Core document carries the organization ID and Catalog source pin. Package versions and the accountable owner remain in the admin draft. A member can verify the repository, branch, path and commit independently. Run `node tools/check-enterprise-handoff.mjs <prepared-consumer>` with a compatible Node runtime to exercise Core admission and application in a disposable project.
 
 Set `AIH_WORKBENCH_PROFILES` to an absolute JSON file containing portable Profiles to offer them through the host's read-only Profile library. Individuals can also share Profiles in this browser or export them.
 

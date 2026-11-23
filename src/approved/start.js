@@ -1,4 +1,5 @@
 import { action, link, readStored, store } from './dom.js';
+import { loadConfiguration, currentPolicy, managedMode, refreshPolicy } from './managed-policy.js';
 import { loadWorkbench } from './host.js';
 import { make as icon } from './icons.js';
 import { mount as mountScene } from './scene.js';
@@ -138,11 +139,12 @@ function render(focus = false, refresh = false) {
   function saveDraft(value) {
     if (!store(draftKey, value)) status('This browser does not allow saving. Export the setup to keep it.');
   }
-  const published = publishedSelection();
+  const activePolicy = () => managedMode() ? currentPolicy() : publishedSelection();
+  const published = activePolicy();
   const roleData = role === 'enterprise' ? restrictEnterprise(data, published) : data;
   const api = {
     role, route, status, data: roleData, fullData: data, published, draft,
-    currentData: () => role === 'enterprise' ? restrictEnterprise(data, publishedSelection()) : data,
+    currentData: () => role === 'enterprise' ? restrictEnterprise(data, activePolicy()) : data,
     refresh() { render(false, true); },
     change(key, value) { draft[key] = value; saveDraft(draft); },
     replaceDraft(value) { saveDraft(value); render(false, true); },
@@ -210,4 +212,11 @@ loadWorkbench().then(result => {
   data.gaps = { catalog: 'The Workbench host could not be reached.', clients: 'Core is unavailable.', tools: 'Core is unavailable.' };
   if (current?.step.id === 'reports') window.dispatchEvent(new Event('aih-workbench-data'));
   else render(false, true);
+});
+
+loadConfiguration().then(refreshPolicy).finally(() => {
+  if (current.role === 'enterprise' || current.step.id === 'publish') {
+    if (current.step.id === 'reports') window.dispatchEvent(new Event('aih-workbench-data'));
+    else render(false, true);
+  }
 });

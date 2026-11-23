@@ -7,6 +7,7 @@ import { showEnterprisePolicy, reviewTeamSelection } from './organization.js';
 import { renderToolSetup } from './tool-setup.js';
 import { renderScan } from './scan.js';
 import { personalPreparation } from './personal.js';
+import { enterprisePreparation } from './enterprise.js';
 
 const personalSteps = [
   ['clients', 'CLI targets', 'Choose the clients and a base for each.'],
@@ -39,7 +40,7 @@ export function stepsFor(role) {
 
 const draftFormat = 'aih-workbench-setup/1';
 export const emptyDraft = () => ({
-  format: draftFormat, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
+  format: draftFormat, allowPersonal:false, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
 });
 
 function cleanDraft(value) {
@@ -47,7 +48,10 @@ function cleanDraft(value) {
   const draft = emptyDraft();
   for (const key of Object.keys(draft)) {
     const field = value[key] ?? draft[key];
-    if (key === 'files') {
+    if (key === 'allowPersonal') {
+      if (typeof field !== 'boolean') throw Error('Invalid personal file permission.');
+      draft.allowPersonal = field;
+    } else if (key === 'files') {
       draft.files = checkedFiles(field);
     } else if (Array.isArray(draft[key])) {
       if (!Array.isArray(field) || field.some(entry => typeof entry !== 'string')) throw new Error('Invalid setup selection.');
@@ -148,6 +152,11 @@ function plan(host, api) {
     ['Source and instructions', draft.source || draft.instructions ? 'Recorded in the setup file' : 'None'],
   ]));
   const output = node('div', null, 'ix-stack');
+  if (role === 'enterprise' && data.hostMode === 'read-only') {
+    host.append(details);
+    enterprisePreparation(host, api, selected, eligibleClients);
+    return;
+  }
   if (role === 'individual' && data.hostMode === 'read-only') {
     host.append(details);
     personalPreparation(host, api, selected.length === draft.items.length ? selected : [], eligibleClients);
@@ -210,6 +219,7 @@ export function renderJourney(host, step, api) {
     if (step === 'content') sourceFiles(host, api);
   } else if (step === 'byo') {
     sourceFiles(host, api);
+    host.append(checkbox('Permit members to add a personal instruction file', draft.allowPersonal, value=>change('allowPersonal',value)));
   } else if (step === 'tools') {
     renderToolSetup(host, api);
   } else if (step === 'scan' || step === 'self-scan') {
@@ -222,8 +232,7 @@ export function renderJourney(host, step, api) {
   } else if (step === 'files' || step === 'publish') {
     if (step === 'publish') {
       reviewTeamSelection(host, api, true);
-      host.append(section('Organization publication',
-        hint(data.gaps.publication ?? 'An organization publication service must review and accept the policy.')));
+
     }
     host.append(section(step === 'publish' ? 'Keep the draft' : 'Saved setup files', files(api)));
   }

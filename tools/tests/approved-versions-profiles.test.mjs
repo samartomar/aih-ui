@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createPortableProfiles } from '../server/portable-profiles.mjs';
 import { installedVersions, versionUnavailable } from '../../src/approved/versions.js';
+import { portableProfile, readProfile, readTeamProfile, resolveProfileChoices } from '../../src/approved/profile-model.js';
+import { loadPublicProfile, publicProfileSource } from '../../src/approved/profile-sharing.js';
 
 test('a draft reference requires the exact installed package versions', () => {
   const data = { packages: { core: { version: '2.0.0' }, catalog: { version: '1.0.0' }, scan: { version: '1.1.0' } } };
@@ -51,4 +53,71 @@ test('the host Profile library projects portable files only and refuses cross-or
   const refused = await fetchProfile('http://127.0.0.1:6201');
   assert.equal(refused.status, 403);
   assert.deepEqual(refused.body.profiles, []);
+});
+
+const profile = {
+  format: 'aih-workbench-profile/1', id: 'developer', name: 'Developer', description: 'Review a change',
+  items: ['old-id', 'pinned:second', 'missing'], clients: ['claude', 'removed'],
+  firstTask: 'Read the\npatch.\n', instructions: 'Ask before editing.\n',
+  byo: [{ name: 'Internal', kind: 'skill', source: 'C:/private/source', revision: 'private-sha' }],
+  files: [
+    { name: 'AGENTS.md', text: '# Team rules\r\n', allowUpdates: true },
+    { name: 'personal.md', text: 'Private notes', allowUpdates: false },
+  ],
+};
+const catalog = {
+  items: [{ id: 'pinned:first', itemId: 'old-id' }, { id: 'pinned:second', itemId: 'second' }],
+  clients: [{ id: 'claude' }],
+};
+
+test('saving a private or legacy Profile preserves its own sources and supporting files', () => {
+  assert.deepEqual(readProfile(JSON.parse(JSON.stringify(profile))), profile);
+  const { items, clients, ...rest } = profile;
+  const legacy = { ...rest, format: 'aih-portable-profile/1', catalogIds: items };
+  assert.deepEqual(readProfile(legacy), { ...profile, clients: [] });
+});
+
+test('all share destinations get an exact Catalog-only Profile by default', () => {
+  const choices = resolveProfileChoices(profile, catalog);
+  const baseline = portableProfile(profile, choices);
+  assert.deepEqual(baseline, {
+    format: profile.format, id: profile.id, name: profile.name, description: profile.description,
+    items: ['pinned:first', 'pinned:second'], clients: ['claude'],
+  });
+  const included = portableProfile(profile, choices, { firstTask: true, files: new Set([0]) });
+  assert.deepEqual(included, {
+    ...baseline, firstTask: profile.firstTask,
+    files: [{ name: 'AGENTS.md', text: '# Team rules\r\n', allowUpdates: false }],
+  });
+  assert.equal(portableProfile(profile, choices, { instructions: true }).instructions, profile.instructions);
+  assert.deepEqual(readTeamProfile(JSON.parse(JSON.stringify(included))), included);
+  assert.throws(() => readTeamProfile({ ...baseline, byo: [] }));
+  assert.throws(() => readTeamProfile({ ...baseline, files: [{ name: '../AGENTS.md', text: 'text', allowUpdates: false }] }));
+  assert.throws(() => readTeamProfile({ ...baseline, files: [{ name: 'AGENTS.md', text: 'text', allowUpdates: false, localPath: 'private' }] }));
+});
+
+test('member Profile preview uses exact installed Catalog identity and current policy eligibility', () => {
+  const allowed = { ...catalog, items: [catalog.items[0]] };
+  const choices = resolveProfileChoices(profile, catalog, allowed);
+  assert.equal(choices.eligible, false);
+  assert.deepEqual(choices.items.map(({ value }) => value?.id), ['pinned:first', undefined, undefined]);
+  const ambiguous = { ...catalog, items: [...catalog.items, { id: 'pinned:new', itemId: 'old-id' }] };
+  assert.equal(resolveProfileChoices(profile, ambiguous, allowed).items[0].value, undefined);
+});
+
+test('public Profile links require a pinned GitHub JSON file and send no credentials', async t => {
+  const sha = 'a'.repeat(40);
+  const url = 'https://github.com/team/profiles/blob/' + sha + '/files/my%20profile.json';
+  const source = publicProfileSource(url);
+  assert.equal(source.path, 'files/my profile.json');
+  assert.equal(source.revision, sha);
+  assert.throws(() => publicProfileSource(url.replace(sha, 'main')));
+  assert.throws(() => publicProfileSource(url.replace('github.com', 'github.com.local')));
+  assert.throws(() => publicProfileSource(url.replace('files/', 'files%2F')));
+  const baseline = portableProfile(profile, resolveProfileChoices(profile, catalog));
+  const fetch = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify(baseline)));
+  assert.deepEqual(await loadPublicProfile(url), { profile: baseline, source });
+  assert.equal(fetch.mock.calls[0].arguments[0], source.raw);
+  assert.equal(fetch.mock.calls[0].arguments[1].credentials, 'omit');
+  assert.equal(fetch.mock.calls[0].arguments[1].redirect, 'error');
 });
