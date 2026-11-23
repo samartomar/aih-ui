@@ -33,6 +33,7 @@ function fakeGithub() {
   async function request(method, endpoint, data) {
     if (endpoint === 'user') return { id: state.id, login: state.login, token: 'must never reach browser' };
     assert.ok(endpoint.startsWith(prefix));
+    if (state.repositoryUnavailable) return absent();
     const [route, query] = endpoint.slice(prefix.length).split('?');
     if (method === 'POST') writes.push({ route, data });
     if (!route) return { full_name: config.repository, permissions: { push: state.push !== false } };
@@ -336,4 +337,35 @@ test('GitHub cannot receive a branch write before the local recovery record save
   const completed = await host.call('propose', confirm);
   assert.equal(completed.code, 200);
   assert.deepEqual(github.writes.map(write => write.route), ['/git/blobs', '/git/trees', '/git/commits', '/git/refs', '/pulls']);
+});
+
+test('sanitizes recovery when a switched account cannot access the repository', async t => {
+  const github = fakeGithub();
+  const recoveryDirectory = await mkdtemp(join(tmpdir(), 'aih-github-recovery-'));
+  t.after(() => rm(recoveryDirectory, { recursive: true, force: true }));
+  const initial = await openHost(t, github, { recoveryDirectory });
+  const { body: preview } = await initial.call('preview', { kind: 'policy', selection: ['one'] });
+  const confirm = { confirmationId: preview.confirmationId, confirmed: true };
+  github.state.failPrBeforeWrite = true;
+  const original = await initial.call('propose', confirm);
+  assert.equal(original.body.recovery.status, 'branch-ready');
+
+  const restarted = await openHost(t, github, { recoveryDirectory });
+  github.state.repositoryUnavailable = true;
+  github.state.id++;
+  const switched = await restarted.call('propose', confirm);
+  assert.equal(switched.code, 403);
+  assert.equal(switched.body.recovery, undefined);
+  assert.ok(!JSON.stringify(switched.body).includes(config.repository));
+
+  github.state.id--;
+  const sameAccount = await restarted.call('propose', confirm);
+  assert.equal(sameAccount.code, 502);
+  assert.deepEqual(sameAccount.body.recovery, original.body.recovery);
+  github.state.repositoryUnavailable = false;
+  github.state.failPrBeforeWrite = false;
+  const receipt = await restarted.call('propose', confirm);
+  assert.equal(receipt.code, 200);
+  assert.equal(receipt.body.receipt.headBranch, original.body.recovery.headBranch);
+  assert.equal(github.writes.filter(write => write.route === '/git/refs').length, 1);
 });

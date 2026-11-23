@@ -140,11 +140,15 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
       !repository.archived && !repository.disabled, 'The configured GitHub repository is unavailable.', 503);
     return repository;
   }
-  async function access() {
-    const [user, repository] = await Promise.all([request('GET', 'user'), repositoryMetadata()]);
+  async function signedInIdentity() {
+    const user = await request('GET', 'user');
     checked(typeof user?.login === 'string' && user.login.length > 0 && Number.isSafeInteger(user.id),
       'Sign in to GitHub CLI to use the organization repository.', 503);
-    return { identity: { login: user.login, id: user.id }, canPropose: repository.permissions?.push === true };
+    return { login: user.login, id: user.id };
+  }
+  async function access() {
+    const [identity, repository] = await Promise.all([signedInIdentity(), repositoryMetadata()]);
+    return { identity, canPropose: repository.permissions?.push === true };
   }
   async function readConfig() {
     if (problem) return { status: hasDestination ? 'unavailable' : 'unconfigured', error: problem };
@@ -295,9 +299,9 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
     }
   }
   async function checkCurrentAccount(record) {
-    const [account, baseSha] = await Promise.all([access(), ref(record.baseBranch)]);
-    requireReviewIdentity(record, account.identity);
-    checked(account.canPropose, 'The signed-in account needs repository write access to continue this proposal.', 403);
+    requireReviewIdentity(record, await signedInIdentity());
+    const [repository, baseSha] = await Promise.all([repositoryMetadata(), ref(record.baseBranch)]);
+    checked(repository.permissions?.push === true, 'The signed-in account needs repository write access to continue this proposal.', 403);
     checked(baseSha === record.baseSha, 'The base branch advanced. Preview against the new base before continuing.');
   }
   function managedProposal({ repository, baseBranch, kind, path, headBranch, headSha, baseSha, digest }) {
@@ -345,8 +349,8 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
       .sort((left, right) => right.createdAt - left.createdAt).map(recoveryOf) };
   }
   async function verifyRecovery(record) {
-    const [account, commit] = await Promise.all([access(), gitCommit(record.headSha)]);
-    requireReviewIdentity(record, account.identity);
+    requireReviewIdentity(record, await signedInIdentity());
+    const [commit] = await Promise.all([gitCommit(record.headSha), repositoryMetadata()]);
     checked(commit.parents?.length === 1 && commit.parents[0]?.sha === record.baseSha, 'The saved proposal has a different base commit.');
     const entry = await entryAt(commit.tree.sha, record.path);
     checked(plainFile(entry) && entry.sha === record.blobSha && digestOf(await readBlob(entry.sha)) === record.digest,
@@ -436,7 +440,8 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
       await saveRecovery(record);
       return { receipt };
     } catch (error) {
-      if (record?.durable && !error?.accountMismatch) {
+      const identity = record?.durable && !error?.accountMismatch ? await signedInIdentity().catch(() => null) : null;
+      if (identity && identity.id === record.identity.id) {
         const failure = error instanceof Error ? error : new Error('GitHub handoff could not be verified.');
         failure.recovery = recoveryOf(record);
         throw failure;
