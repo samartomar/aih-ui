@@ -62,6 +62,19 @@ async function checkEnterpriseHandoff(dir) {
     managed = {status:'ready',content:document,text:JSON.stringify(document)+'\n',
       source:{...revision,commitSha},selection:await policy.openPolicy(document)};
   }
+  // Two frameworks may legitimately reuse an item ID. The second framework
+  // is in scope, but only its independently selected item is permitted.
+  const another = parts.catalog.frameworks.find(entry => entry.id !== framework.id &&
+    parts.catalog.items.some(item => item.framework === entry.id));
+  assert.ok(another);
+  const otherSelection = items.find(item => item.framework === another.sha256);
+  const duplicate = {...parts.catalog.items.find(item => item.id === skill), framework:another.id};
+  const duplicateSource = {...parts, catalog:{...parts.catalog, items:[...parts.catalog.items, duplicate]}};
+  const qualified = createEnterprisePolicy({consumer,summary,catalog:async () => duplicateSource,
+    published:{frameworks, items:[...items, {...allowed, framework:another.sha256, id:another.sha256 + '/' + skill}]}});
+  const distinct = await qualified.buildPolicy({...choices, items:[allowed.id,otherSelection.id]});
+  assert.ok(distinct.content.entries.some(entry => entry.content?.item === skill &&
+    entry.content.framework === another.id && entry.obligation === 'prohibited'));
   const output = await policy.buildPolicy(choices);
   assert.equal(output.content.schema,'urn:aihq:core:organization:0.1.0');
   await install(output.content);
