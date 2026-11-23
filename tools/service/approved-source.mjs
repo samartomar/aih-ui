@@ -76,7 +76,8 @@ export async function approvedAssessments({ items }) {
   const directory = process.env.AIH_APPROVED_SCAN_SUMMARIES;
   if (!directory || !isAbsolute(directory)) return { status: 'unavailable', reason: 'No Scan summary source is configured.' };
   if (typeof scan.readSummary !== 'function') return { status: 'unavailable', reason: 'This Scan package does not publish a summary reader.' };
-  return { status: 'read', checkedAt: new Date().toISOString(), assessments: await assessmentRows(items, readSavedSummary) };
+  const assessments = await assessmentRows(items, readSavedSummary);
+  return { status: 'read', checkedAt: new Date().toISOString(), assessments };
 }
 
 export async function approvedEvidence({ scanKey }) {
