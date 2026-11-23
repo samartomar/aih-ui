@@ -96,15 +96,17 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog }
       return [framework?.sha256 + '/' + item.id, item];
     }));
     if (chosen.some(item => !item || !exact.has(item.id))) throw selectionError('A selected item is unavailable from the exact pinned Catalog.');
-    const selectedIds = new Set(chosen.map(item => item.itemId));
+    const itemKey = item => JSON.stringify([item.framework, item.id]);
+    const selectedIds = new Set(chosen.map(item => itemKey(exact.get(item.id))));
     const excludedClients = harness.listTools().tools.map(tool => tool.id).filter(id => !selectedClients.includes(id));
     const allowedFrameworks = new Set(chosen.map(item => exact.get(item.id).framework));
     const entries = inventory.items.filter(item => allowedFrameworks.has(item.framework)).flatMap(item => {
       const content = { item: item.id, framework: item.framework };
-      if (!selectedIds.has(item.id)) return [{id:entryId('exclude', item.id), obligation:'prohibited', content}];
-      return [{id:entryId('selected', item.id), obligation:'permitted', scopes:['project'], clients:selectedClients, content},
-        ...(excludedClients.length ? [{id:entryId('other-clis', item.id), obligation:'prohibited', scopes:['project'], clients:excludedClients, content}] : []),
-        {id:entryId('other-scope', item.id), obligation:'prohibited', scopes:['user'], content}];
+      const key = itemKey(item);
+      if (!selectedIds.has(key)) return [{id:entryId('exclude', key), obligation:'prohibited', content}];
+      return [{id:entryId('selected', key), obligation:'permitted', scopes:['project'], clients:selectedClients, content},
+        ...(excludedClients.length ? [{id:entryId('other-clis', key), obligation:'prohibited', scopes:['project'], clients:excludedClients, content}] : []),
+        {id:entryId('other-scope', key), obligation:'prohibited', scopes:['user'], content}];
     });
     if (selection.allowPersonal) entries.push({
       id:'workbench-personal-file', obligation:'permitted', change:{ identity:personalIdentity }, scopes:['project'],
