@@ -24,8 +24,12 @@ export function tools() {
   if (typeof harness.listTools !== "function") {
     return { state: "unavailable", reason: "The installed @aihq/core/harness does not export listTools." };
   }
+  const registered = harness.listTools();
+  if (registered?.status === 'ok') return {
+    state: 'published', tools: registered.tools.map(({ id, label, surface }) => ({ id, label, surface })),
+  };
   const all = harness.listTools({ includeUnobserved: true });
-  const observed = new Set(harness.listTools().map(entry => entry.id));
+  const observed = new Set(registered.map(entry => entry.id));
   return {
     state: "published",
     tools: all.map(entry => {
@@ -40,9 +44,15 @@ export function tools() {
 // Header observations read local files only. Check this machine retains its own explicit diagnostic action.
 
 export async function toolInspection() {
+  const registry = harness.listTools();
+  if (registry?.status === 'ok') {
+    const { inspect } = await import('@aihq/core');
+    const answer = await inspect({ target: ['node', 'git'], offline: true }, { budgetMs: 5000 });
+    return { ...answer, tools: answer.tools?.map(({ tool, target, ...row }) => ({ id: tool ?? target, ...row })) };
+  }
   const { inspectToolHost } = await import('@aihq/core/harness/runtime');
   const observations = [];
-  for (const tool of harness.listTools()) {
+  for (const tool of registry) {
     try { observations.push({ id: tool.id, host: await inspectToolHost({ tool: tool.id, project: process.env.AIH_CONSUMER_PROJECT ?? process.cwd(), items: [] }, { budgetMs: 3000 }) }); }
     catch { observations.push({ id: tool.id, host: { status: 'failed' } }); }
   }

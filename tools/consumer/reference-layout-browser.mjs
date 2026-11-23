@@ -10,7 +10,7 @@ export async function runReferenceLayoutBrowser({origin,output,playwrightModule,
   const {chromium}=await import(playwrightModule);await mkdir(output,{recursive:true});
   const browser=await chromium.launch({headless:true});const errors=[],observed=[];
   const ready=async page=>{
-    await page.goto(origin+'/');await page.locator('#browse-family option[value="ECC"]').waitFor({state:'attached'});
+    await page.goto(origin+'/classic.html');await page.locator('#browse-family option[value="ECC"]').waitFor({state:'attached'});
     if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
   };
   try {
@@ -56,7 +56,7 @@ export async function runFamilyStatesBrowser({origin,output,playwrightModule}) {
       const response=await route.fetch();const body=await response.json();if(state==='loading')await held;
       return route.fulfill({response,json:state==='empty'?{...body,items:[]}:body});
     });
-    await page.goto(origin+'/');const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
+    await page.goto(origin+'/classic.html');const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
     const expected=state==='loading'?'Loading frameworks and observed counts…':state==='empty'?'No frameworks available from the configured sources.':'Content families unavailable. See the source error.';
     await page.locator('#framework-navigation').filter({hasText:expected}).waitFor();
     const packages=page.locator('#package-disclosure');await packages.locator('summary').click();await packages.getByText('@aihq/catalog',{exact:true}).waitFor();

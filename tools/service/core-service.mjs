@@ -17,6 +17,26 @@
  *   contract-check.mjs     the start-up contract check
  */
 const OPS = {
+  async repositoryScan(request) {
+    const { repositoryScan } = await import('./repository-scan.mjs');
+    return repositoryScan(request);
+  },
+  async importRepositoryScan(request) {
+    const { importRepositoryScan } = await import('./import-repository-scan.mjs');
+    return importRepositoryScan(request);
+  },
+  async approvedCatalog() {
+    const { approvedCatalog } = await import('./approved-source.mjs');
+    return approvedCatalog();
+  },
+  async approvedAssessments(request) {
+    const { approvedAssessments } = await import('./approved-source.mjs');
+    return approvedAssessments(request);
+  },
+  async approvedEvidence(request) {
+    const { approvedEvidence } = await import('./approved-source.mjs');
+    return approvedEvidence(request);
+  },
   /** Loaded only when asked for, so a Core that predates the export fails this one operation and says so. */
   async coreTargets() {
     const { coreTargets } = await import("./core-targets.mjs");

@@ -15,7 +15,7 @@ import { readdirSync, statSync } from "node:fs";
 import { join, posix } from "node:path";
 
 /** Extensions the run directory serves. Anything else in src/ is not an asset. */
-const SERVED = new Set([".html", ".js", ".css", ".json", ".svg"]);
+const SERVED = new Set([".html", ".js", ".css", ".json", ".svg", ".woff2"]);
 /** The backend worker is ESM modules only. */
 const SERVICE = new Set([".mjs"]);
 
@@ -26,7 +26,7 @@ const SERVICE = new Set([".mjs"]);
 const NOT_SERVED = ["report/templates/"];
 
 /** Entry points the page cannot start without. */
-const REQUIRED_PAGE_ASSETS = ["index.html", "main.js"];
+const REQUIRED_PAGE_ASSETS = ["index.html", "approved/start.js", "classic.html", "main.js"];
 
 function walk(root, extensions, prefix = "", found = []) {
   for (const item of readdirSync(join(root, prefix), { withFileTypes: true })) {

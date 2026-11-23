@@ -16,7 +16,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
   async function open(context, theme) {
     const next = await context.newPage(); page = next; next.setDefaultTimeout(30_000);
     next.on('pageerror', error => errors.push(error.message));
-    await next.goto(origin + '/');
+    await next.goto(origin + '/classic.html');
     await next.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await next.locator('#setup-dialog').isVisible()) {
       await next.getByRole('radio', { name: /Vibe coder/ }).check();

@@ -12,7 +12,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
       const page=await context.newPage();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message));
       // This is a viewer preference, not a grant. The real header validates it against listTools.
       await context.addInitScript(()=>localStorage.setItem('wb-your-tool','claude'));
-      await page.goto(origin+'/');await page.locator('#browse-family option').nth(1).waitFor({state:'attached'});
+      await page.goto(origin+'/classic.html');await page.locator('#browse-family option').nth(1).waitFor({state:'attached'});
       if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
       const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
       const rail=page.locator('#framework-navigation');
@@ -91,7 +91,7 @@ export async function runFrameworkLoadingBrowser({origin,output,playwrightModule
   try {for(const theme of ['dark','light']) {
     const page=await browser.newPage({viewport:{width:1440,height:1000}});let release;const held=new Promise(done=>{release=done;});
     await page.route('**/api/authoring-catalog',async route=>{const response=await route.fetch();await held;try{await route.fulfill({response});}catch { /* The fixture page may close while its held response resumes. */ }});
-    await page.goto(origin+'/');const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.last().click();
+    await page.goto(origin+'/classic.html');const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.last().click();
     await page.locator('#framework-navigation').filter({hasText:'Loading frameworks and observed counts…'}).waitFor();
     assert.ok(await page.locator('#framework-guidance').isVisible(), 'State-aware first-step guidance remains visible');await page.screenshot({path:join(output,`${theme}-loading.png`)});release();await page.close();
   }}finally{await browser.close();}
@@ -100,7 +100,7 @@ export async function runFrameworkLoadingBrowser({origin,output,playwrightModule
 export async function runFrameworkReopenBrowser({origin,output,savedDirectory,expected,playwrightModule}) {
   const {chromium}=await import(playwrightModule);const browser=await chromium.launch({headless:true});await mkdir(output,{recursive:true});
   try {for(const theme of ['dark','light']) {
-    const page=await browser.newPage();await page.goto(origin+'/');await page.locator('#browse-family option').nth(1).waitFor({state:'attached'});
+    const page=await browser.newPage();await page.goto(origin+'/classic.html');await page.locator('#browse-family option').nth(1).waitFor({state:'attached'});
     if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();}
     const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
     await openPolicyFileActions(page);await page.locator('#policy-open').setInputFiles(join(savedDirectory,`${theme}-saved-policy.json`));

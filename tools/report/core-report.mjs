@@ -1,5 +1,5 @@
-// The Node side of the V9 report presentation: finds the installed @aihq/core, loads its public
-// `./report` data interface and binds the Workbench renderer (src/report/render.js) to it.
+// The Node side of the V9 report presentation: loads the installed @aihq/core
+// public snapshot data interface and binds it to the Workbench renderer.
 // Only the package's own export map is followed; no private dist path is named here.
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -25,17 +25,30 @@ function exportedModule(core, subpath) {
   return typeof target === 'string' ? pathToFileURL(join(core.root, target)).href : null;
 }
 
-/** `@aihq/core/report` from the installation that `fromDir` resolves to, with its version. */
+function unwrapSnapshot(result, field) {
+  if (result.status === 'ok') return result[field];
+  const code = result.status === 'unsupported-version' ? 'SCHEMA_UNSUPPORTED' : 'INPUT_INVALID';
+  const message = result.problems?.map(problem => problem.message).join(' ') || 'Core refused the snapshot.';
+  throw Object.assign(new Error(message), { code });
+}
+
+/** The public report functions from the installation that `fromDir` resolves to, with its version. */
 export async function loadCoreReport(fromDir) {
   const core = findCorePackage(fromDir);
   if (!core) throw new Error(`@aihq/core is not installed for ${resolve(fromDir)}; run from a consumer that installs it, or pass --consumer <dir>.`);
-  const url = exportedModule(core, './report');
-  if (!url) throw new Error(`@aihq/core ${core.version} does not export ./report.`);
+  const legacy = exportedModule(core, './report');
+  const url = legacy ?? exportedModule(core, './contracts');
+  if (!url) throw new Error(`@aihq/core ${core.version} does not export report data functions.`);
   const data = await import(url);
   for (const name of ['importSnapshot', 'exportSnapshot', 'validateSnapshot']) {
-    if (typeof data[name] !== 'function') throw new Error(`@aihq/core/report ${core.version} does not publish ${name}.`);
+    if (typeof data[name] !== 'function') throw new Error(`@aihq/core ${core.version} does not publish ${name}.`);
   }
-  return { data, version: core.version, root: core.root };
+  const snapshotData = legacy ? data : {
+    importSnapshot: input => unwrapSnapshot(data.importSnapshot(input), 'snapshot'),
+    exportSnapshot: snapshot => unwrapSnapshot(data.exportSnapshot(snapshot), 'json'),
+    validateSnapshot: value => data.validateSnapshot(value),
+  };
+  return { data: snapshotData, version: core.version, root: core.root };
 }
 
 /**

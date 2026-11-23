@@ -65,7 +65,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     return result;
   };
   try {
-    await page.goto(plan.origin + '/');
+    await page.goto(plan.origin + '/classic.html');
     await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'Existing actual local setup must survive upgrade');
     await chooseCatalogSupport(page, 'all');

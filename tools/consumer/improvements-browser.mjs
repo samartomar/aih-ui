@@ -65,7 +65,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
       const operation = /\/api\/authoring-([\w-]+)$/.exec(new URL(request.url()).pathname)?.[1];
       if (operation && request.method() === 'POST') operations.push(operation);
     });
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();

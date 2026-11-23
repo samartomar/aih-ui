@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openPolicyAdvanced, openPolicyFileActions, openSourceDetails, closePolicyDrawer } from './policy-drawer.mjs';
 async function enter(page, origin, theme, { hasTool = true } = {}) {
-  await page.goto(origin + '/');
+  await page.goto(origin + '/classic.html');
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();

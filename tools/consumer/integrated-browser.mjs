@@ -29,7 +29,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     const page = await context.newPage(); observed = page; page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 500) failedResponses.push(`${response.status()} ${response.url()}`); });
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
@@ -39,11 +39,24 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     return page;
   };
   try {
+    const primary = await browser.newPage();
+    try {
+      primary.on('pageerror', error => errors.push(error.message));
+      const response = await primary.goto(origin + '/');
+      assert.equal(response?.status(), 200);
+      assert.equal(new URL(primary.url()).pathname, '/');
+      await primary.getByRole('navigation', { name: 'Choose your role' }).getByRole('link', { name: 'Individual User' }).click();
+      await primary.getByRole('heading', { name: 'Personal CLI setup' }).waitFor();
+      await primary.getByRole('heading', { name: 'Start a personal setup' }).waitFor();
+      assert.equal(await primary.locator('#browse-family').count(), 0, 'The root serves the approved Workbench.');
+    } finally {
+      await primary.close();
+    }
     const page = await pageSetup(await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } }));
     const policy = async p => JSON.parse(await p.locator('#policy-bytes').textContent());
     assert.deepEqual((await policy(page)).metadata['aih.workbench'].roots, []);
     for (const family of ['Extensions', 'ECC', 'Superpowers', 'Anthropic']) assert.equal(await page.locator(`#browse-family option[value="${family}"]`).count(), 1);
-    assert.equal(await page.locator('iframe').count(), 0); assert.equal(new URL(page.url()).pathname, '/');
+    assert.equal(await page.locator('iframe').count(), 0); assert.equal(new URL(page.url()).pathname, '/classic.html');
     await chooseCatalogFamily(page, 'Extensions'); await page.locator('#catalog-search').fill('matt');
     assert.ok(await page.getByRole('button', { name: 'Add extensions.matt.ask-matt', exact: true }).isVisible());
     await page.locator('#catalog-search').fill('');

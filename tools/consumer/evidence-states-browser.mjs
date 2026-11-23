@@ -54,7 +54,7 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
       if (response.status() >= 500) failedResponses.push(`${response.status()} ${response.url()}`);
       if (new URL(response.url()).pathname === '/api/authoring-inspect-review') inspected.push(response.status());
     });
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'This journey runs against a Workbench whose setup already exists.');
     await chooseCatalogSupport(page, 'all');

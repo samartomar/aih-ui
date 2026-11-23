@@ -5,6 +5,6 @@
  */
 export function coreTargetsSummary(answer) {
   return answer.ok
-    ? { state: "published", source: "@aihq/core/harness nativeClientIds", targets: answer.targets, labels: answer.labels }
+    ? { state: "published", source: answer.source ?? "@aihq/core/harness nativeClientIds", targets: answer.targets, labels: answer.labels }
     : { state: "unavailable", reason: answer.error };
 }

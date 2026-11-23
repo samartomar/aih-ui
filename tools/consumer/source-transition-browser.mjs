@@ -51,7 +51,7 @@ export async function runSourceTransitionBrowser({ plan, output, playwrightModul
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const download = async name => { const event = page.waitForEvent('download'); await openSetupAdvanced(page).then(() => page.locator('#policy-save').click()); const path = join(output, name); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   try {
-    await page.goto(plan.origin + '/'); await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
+    await page.goto(plan.origin + '/classic.html'); await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
     await openPolicyWorkspace(page); await page.locator('#policy-open').setInputFiles(original);
     await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();

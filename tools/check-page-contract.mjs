@@ -5,7 +5,7 @@
  *
  *   node tools/check-page-contract.mjs
  *
- * 1. Every element id the page modules collect exists in src/index.html, exactly once. A
+ * 1. Every element id the page modules collect exists in the corresponding entry page, exactly once. A
  *    mismatch is a blank page, so it is checked here rather than discovered in a browser.
  *    EVERY module under src/ is read, so moving code into a new module keeps it covered.
  * 2. The module graph resolves: every relative import names a file that exists, and every
@@ -42,8 +42,8 @@ function check(description, condition, detail = "") {
 
 /* ---------------------------------------------------- 1. the page's element ids */
 
-const html = readFileSync(join(REPO_ROOT, "src", "index.html"), "utf8");
-const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+const html = readFileSync(join(REPO_ROOT, "src", "classic.html"), "utf8");
+const approvedHtml = readFileSync(join(REPO_ROOT, "src", "index.html"), "utf8");
 
 // The required set is DERIVED from the modules rather than restated here. A
 // hardcoded copy drifts: the page grows an element, the list does not, and the
@@ -63,8 +63,15 @@ function jsModules(dir, prefix = "", found = []) {
 const SRC = join(REPO_ROOT, "src");
 const MODULES = jsModules(SRC);
 const required = new Set();
+const approvedRequired = new Set();
 for (const module of MODULES) {
   const source = readFileSync(join(SRC, module), "utf8");
+  if (module.startsWith("approved/")) {
+    for (const lookup of source.matchAll(/(?:getElementById|\$)\((["'])([a-z][a-z0-9-]*)\1\)/g)) {
+      approvedRequired.add(lookup[2]);
+    }
+    continue;
+  }
   // ids collected in bulk, in either form a module writes them:
   //   const ids = [ "a", "b", ... ];        and        collectIds([ "a", ... ])
   // The second form was unchecked until 2026-09-22, which left the header's
@@ -78,18 +85,20 @@ for (const module of MODULES) {
 check(`every page module under src/ is read (${MODULES.length} found)`, MODULES.length > 0, "found none");
 check("the page modules collect at least one id", required.size > 0, "found none");
 
-const missing = [...required].filter((id) => !ids.includes(id));
-check(
-  `index.html carries every id the page collects (${required.size} checked)`,
-  missing.length === 0,
-  missing.join(", "),
-);
-const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
-check("index.html has no duplicate id", duplicates.length === 0, duplicates.join(", "));
+function checkIds(page, source, requiredIds) {
+  const ids = [...source.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+  const missing = [...requiredIds].filter(id => !ids.includes(id));
+  check(`${page} carries every id the page collects (${requiredIds.size} checked)`,
+    requiredIds.size > 0 && missing.length === 0, missing.join(", "));
+  const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+  check(`${page} has no duplicate id`, duplicates.length === 0, duplicates.join(", "));
+}
+checkIds("classic.html", html, required);
+checkIds("index.html", approvedHtml, approvedRequired);
 
 // A class hook the shell depends on, which no id list covers.
 check(
-  "index.html carries the inspector tab buttons",
+  "classic.html carries the inspector tab buttons",
   /class="[^"]*inspector-tab-btn/.test(html),
   "no .inspector-tab-btn in the page",
 );
@@ -102,7 +111,7 @@ check(
 // not a drift nobody noticed. Options are never added here: the design source
 // decides which of them the page offers.
 const sortBlock = /<select[^>]*id="sort-select"[\s\S]*?<\/select>/.exec(html);
-check("index.html carries the sort control", sortBlock !== null, "no #sort-select in the page");
+check("classic.html carries the sort control", sortBlock !== null, "no #sort-select in the page");
 const sortOptions = sortBlock === null ? [] : [...sortBlock[0].matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
 const unknownOptions = sortOptions.filter((option) => !SORT_KEYS.includes(option));
 check(
@@ -126,7 +135,7 @@ let edges = 0;
 const brokenImports = [];
 for (const module of MODULES) {
   const source = readFileSync(join(SRC, module), "utf8");
-  for (const statement of source.matchAll(/from "(\.[^"]+)"/g)) {
+  for (const statement of source.matchAll(/(?:\bfrom\s+|\bimport\s*)["'](\.[^"']+)["']/g)) {
     edges += 1;
     const target = posix.normalize(posix.join(posix.dirname(module), statement[1]));
     if (!existsSync(join(SRC, target))) brokenImports.push(`${module} -> ${statement[1]}`);
@@ -136,21 +145,24 @@ check(`every relative import resolves (${edges} checked)`, brokenImports.length 
 
 // What the page loads, against what the preview copies from src/.
 const copied = new Set(pageAssets(REPO_ROOT).map((asset) => asset.to));
-const referenced = [...html.matchAll(/(?:src|href)="(?!https?:)([^"]+)"/g)].map((match) => match[1]);
-const ownReferences = referenced.filter((href) => !href.startsWith("#"));
-const notCopied = ownReferences.filter((href) => !copied.has(href.replace(/^\.\//, "")));
-check(
-  `the preview copies every page asset index.html references (${ownReferences.length} checked)`,
-  notCopied.length === 0,
-  notCopied.join(", "),
-);
-check("index.html loads the module entry point", referenced.includes("main.js"), referenced.join(", "));
+function checkAssets(page, source, entry) {
+  const referenced = [...source.matchAll(/(?:src|href)="(?!https?:)([^"]+)"/g)].map(match => match[1]);
+  const files = referenced.filter(href => href !== "/" && !href.startsWith("#"))
+    .map(href => href.replace(/^(?:\.\/|\/)/, ""));
+  const missing = files.filter(file => !copied.has(file));
+  check(`the preview copies every page asset ${page} references (${files.length} checked)`, missing.length === 0, missing.join(", "));
+  check(`${page} loads its module entry point`, files.includes(entry), referenced.join(", "));
+}
+checkAssets("classic.html", html, "main.js");
+checkAssets("index.html", approvedHtml, "approved/start.js");
 
 /* ------------------------------------------- 3. request-path classification */
 
 const runDir = resolve(REPO_ROOT, "src");
 const cases = [
-  ["/", 200, "the page"],
+  ["/", 200, "the approved page"],
+  ["/classic.html", 200, "the Classic page"],
+  ["/approved/start.js", 200, "the approved entry module"],
   ["/summary.json", 200, "the preview summary"],
   ["/main.js", 200, "the page entry module"],
   ["/catalog/cards.js", 200, "a page module in a subdirectory"],

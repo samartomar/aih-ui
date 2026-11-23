@@ -21,7 +21,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
   const errors = [], observed = [];
   page.on('pageerror', error => errors.push(error.message));
   try {
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
