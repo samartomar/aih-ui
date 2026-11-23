@@ -14,9 +14,13 @@ async function themed(html) {
 export function renderReports(host, api) {
   const status = hint('Open a Core snapshot to show its saved evidence in the V9 report.');
   status.setAttribute('role', 'status');
-  const frame = node('iframe', null, 'ix-v9-frame');
-  frame.title = 'V9 report snapshot';
-  frame.setAttribute('sandbox', 'allow-scripts');
+  function reportFrame() {
+    const element = node('iframe', null, 'ix-v9-frame');
+    element.title = 'V9 report snapshot';
+    element.setAttribute('sandbox', 'allow-scripts');
+    return element;
+  }
+  let frame = reportFrame();
   let snapshot, saved, assessment, rendering = false, request = 0;
   const overview = () => {
     const data = api.currentData();
@@ -37,8 +41,10 @@ export function renderReports(host, api) {
     documentHtml = html;
     const decorated = await themed(html);
     if (documentHtml === html && frame.isConnected) {
-      frame.srcdoc = decorated;
-      frame.hidden = false;
+      const next = reportFrame();
+      next.srcdoc = decorated;
+      frame.replaceWith(next);
+      frame = next;
     }
     return decorated;
   }
