@@ -21,7 +21,7 @@ export function renderReports(host, api) {
   const overview = () => {
     const data = api.currentData();
     return renderWorkbenchOverview({
-      catalog: data.gaps.catalog && !data.items.length ? null : data.items,
+      catalog: api.role !== 'enterprise' && data.gaps.catalog && !data.items.length ? null : data.items,
       clients: data.gaps.clients ? null : data.clients,
       tools: data.gaps.tools ? null : data.tools,
       packages: data.packages, assessment,
