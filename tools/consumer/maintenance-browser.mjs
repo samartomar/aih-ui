@@ -77,7 +77,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
         categoriesSent.push(body.categories); checkInputs.push(body.envelopeBytes ? 'envelope' : body.bytes ? 'policy' : 'none');
       }
     });
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();

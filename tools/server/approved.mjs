@@ -1,3 +1,5 @@
+import { isAbsolute } from 'node:path';
+import { createLocalCatalog } from '../workbench/local-catalog.mjs';
 import { callServiceAsync } from './service-client.mjs';
 
 export async function createApprovedAdapter(consumerDir) {
@@ -5,6 +7,8 @@ export async function createApprovedAdapter(consumerDir) {
   if (!published.ok) throw new Error(`Catalog interface could not load: ${published.error}`);
   if (published.state === 'legacy') return null;
   const items = new Map(published.items.map(item => [item.id, item]));
+  const toolConsumer = process.env.AIH_APPROVED_TOOL_CONSUMER ?? consumerDir;
+  let planner;
   const catalog = { ...published, items: published.items.map(({ scanKey, ...item }) => item) };
   const reply = (response, status, value) => response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store',
@@ -13,7 +17,9 @@ export async function createApprovedAdapter(consumerDir) {
     catalog: () => catalog,
     close() {},
     async handle(request, response, pathname) {
-      if (pathname !== '/api/repository-scan' && pathname !== '/api/approved-evidence' && !pathname.startsWith('/api/authoring-')) return false;
+      const importing = pathname === '/api/repository-scan-import';
+      if (pathname !== '/api/repository-scan' && pathname !== '/api/approved-evidence' &&
+        pathname !== '/api/approved-tool-plan' && !importing && !pathname.startsWith('/api/authoring-')) return false;
       const host = request.headers.host;
       if (![`127.0.0.1:${request.socket.localPort}`, `localhost:${request.socket.localPort}`].includes(host) ||
         request.headers['sec-fetch-site'] === 'cross-site' ||
@@ -21,25 +27,37 @@ export async function createApprovedAdapter(consumerDir) {
         reply(response, 403, { status: 'refused', reason: 'Same-origin Workbench request required.' });
         return true;
       }
-      if (pathname === '/api/repository-scan') {
+      if (pathname === '/api/repository-scan' || importing) {
         if (request.method !== 'POST' || request.headers['content-type'] !== 'application/json') {
-          reply(response, 405, {reason:'Submit a folder from the Workbench.'});
+          reply(response, 405, { reason: 'Submit a JSON request from the Workbench.' });
+          return true;
+        }
+        if (request.headers.origin !== `http://${host}`) {
+          reply(response, 403, { reason: 'Same-origin Workbench request required.' });
           return true;
         }
         const chunks = [];
         let size = 0;
+        const limit = importing ? 24 * 1024 * 1024 : 65536;
         for await (const chunk of request) {
           size += chunk.length;
-          if (size > 65536) { reply(response, 413, {reason:'Request too large.'}); return true; }
+          if (size > limit) { reply(response, 413, { reason: 'Request too large.' }); return true; }
           chunks.push(chunk);
         }
-        let folder;
+        let input;
         try {
-          folder = JSON.parse(Buffer.concat(chunks)).folder;
+          input = JSON.parse(Buffer.concat(chunks));
         } catch {
-          reply(response, 400, {reason:'Expected a JSON folder request.'});
+          reply(response, 400, { reason: 'Expected a JSON request.' });
           return true;
         }
+        if (importing) {
+          const result = await callServiceAsync(consumerDir, { op: 'importRepositoryScan', files: input?.files });
+          reply(response, result.ok && result.status === 'read' ? 200 : 422,
+            result.ok ? result : { reason: 'The public Scan reader could not open this report.' });
+          return true;
+        }
+        const folder = input?.folder;
         if (typeof folder !== 'string' || !folder.trim()) reply(response, 400, {reason:'Enter a folder path.'});
         else {
           const result = await callServiceAsync(consumerDir, {op:'repositoryScan', folder});
@@ -49,6 +67,27 @@ export async function createApprovedAdapter(consumerDir) {
       }
       if (request.method === 'GET' && pathname === '/api/authoring-catalog') {
         reply(response, 200, catalog);
+      } else if (request.method === 'GET' && pathname === '/api/approved-tool-plan') {
+        const params = new URL(request.url, `http://${host}`).searchParams;
+        const ids = params.getAll('item');
+        const selected = ids.map(id => items.get(id));
+        if (!ids.length || ids.length > 16 || new Set(ids).size !== ids.length ||
+          selected.some(item => item?.kind !== 'ai-setup')) {
+          reply(response, 400, { status: 'unavailable', reason: 'Select exact Tool Setup recipes from this Catalog.' });
+          return true;
+        }
+        planner ??= isAbsolute(toolConsumer) ? createLocalCatalog(consumerDir, undefined, toolConsumer).catch(() => null) : Promise.resolve(null);
+        const source = await planner;
+        if (!source) {
+          reply(response, 409, { status: 'unavailable', reason: 'A prepared consumer with pinned Catalog recipe inputs is required to preview tool setup.' });
+          return true;
+        }
+        try {
+          reply(response, 200, source.previewTools(selected, params.get('client'), params.get('platform')));
+        } catch (error) {
+          const invalid = error.code === 'CATALOG_INPUT_INVALID';
+          reply(response, invalid ? 400 : 500, { status: 'unavailable', reason: invalid ? error.message : 'Catalog could not preview this tool setup.' });
+        }
       } else if (request.method === 'GET' && pathname === '/api/approved-evidence') {
         const id = new URL(request.url, `http://${host}`).searchParams.get('item');
         const item = items.get(id);

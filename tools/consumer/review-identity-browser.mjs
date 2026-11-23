@@ -48,7 +48,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 500) failedResponses.push(`${response.status()} ${response.url()}`); });
     page.on('request', request => { if (request.method() === 'POST') sent.push({ path: new URL(request.url()).pathname, body: request.postData() ?? '' }); });
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();

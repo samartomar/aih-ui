@@ -59,7 +59,7 @@ h1,h2,h3,h4,p,dl,dd {margin:0}
 .ix-roles {border-bottom:1px solid var(--approved-fine-rule)}
 .ix-role-nav {display:flex;align-items:stretch;gap:26px}
 .ix-role {font-size:.8125rem;font-weight:510;display:inline-flex;align-items:center;min-height:44px;color:var(--muted);text-decoration:none;position:relative}
-.ix-role:hover,.ix-role[aria-current] {color:white}
+.ix-role:hover,.ix-role[aria-current] {color:var(--color-text)}
 .ix-role[aria-current]::after {content:"";position:absolute;height:2px;inset:auto 0 0;background:var(--approved-accent-selected);border-radius:2px}
 .ix-hero {position:relative;isolation:isolate;border-bottom:1px solid var(--approved-strong-rule);overflow:hidden;background:radial-gradient(ellipse at 76% 52%,var(--approved-hero-light) 0%,var(--approved-hero-ground) 48%,var(--approved-hero-edge) 90%)}
 #ix-ambient {position:absolute;inset:0;inline-size:100%;block-size:100%;pointer-events:none}
@@ -74,7 +74,7 @@ h1,h2,h3,h4,p,dl,dd {margin:0}
 .ix-diagram {content-visibility:auto;contain-intrinsic-size:auto 240px}
 #ix-canvas {position:absolute;inset:0;width:100%;height:100%;display:block}
 #intake-view #ix-motion {position:absolute;bottom:15px;right:0;display:grid;place-items:center;border:1px solid var(--approved-control-outline);background:var(--approved-motion-background);border-radius:50%;width:28px;height:28px;padding:0;color:var(--approved-copy-soft);font:12px/1 var(--sans)}
-#ix-motion:hover {color:white;border-color:var(--approved-logo-bottom)}
+#ix-motion:hover {color:var(--color-text);border-color:var(--approved-logo-bottom)}
 .ix-layout {display:grid;grid-template-columns:minmax(172px, 222px) minmax(0,1fr);gap:clamp(32px,4.8vw,74px);padding-block:35px 56px;align-items:start}
 .ix-steps {position:sticky;top:24px;min-width:0}
 .ix-ledger-head {display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;padding:0 8px}
@@ -82,7 +82,7 @@ h1,h2,h3,h4,p,dl,dd {margin:0}
 #ix-position,.ix-step-index {font:11px/1.4 var(--mono);color:var(--ix-icon-quiet)}
 #ix-step-nav {display:grid;gap:2px}
 .ix-step {display:flex;align-items:center;gap:10px;min-height:36px;padding:7px 8px;color:var(--approved-copy-soft);text-decoration:none;font-size:.84375rem;line-height:1.4;border-radius:5px}
-.ix-step:hover {background:var(--approved-control);color:white}
+.ix-step:hover {background:var(--approved-control);color:var(--color-text)}
 .ix-step[aria-current] {color:var(--ink);background:var(--approved-fine-rule);font-weight:510}
 .ix-step[aria-current] .ix-icon:not([data-tone]) {color:var(--approved-heading-secondary)}
 #ix-step-nav [aria-current]::after {content:none}
@@ -155,13 +155,13 @@ label.ix-tool-label {cursor:pointer}
 .ix-primary,.ix-secondary,.ix-back,.ix-link {cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;font:600 13px/1.35 var(--sans);text-decoration:none}
 .ix-primary,.ix-secondary {min-height:34px;padding:7px 13px;border-radius:6px;transition:background .16s ease,border-color .16s ease,transform .16s ease}
 .ix-primary {color:var(--onblue);background:var(--approved-copy-bright);border:1px solid var(--approved-hero-heading)}
-.ix-primary:hover {background:white}
+.ix-primary:hover {background:var(--color-text)}
 .ix-secondary {color:var(--approved-copy-bright);background:var(--approved-hero-light);border:1px solid var(--approved-control-outline)}
 .ix-secondary:hover {background:var(--approved-control-hover);border-color:var(--approved-control-hover-outline)}
 .ix-primary:active,.ix-secondary:active {transform:translateY(1px)}
 #intake-view button:disabled {opacity:.48;cursor:default}
 .ix-back,.ix-link {background:transparent;color:var(--approved-copy-soft);border:none;padding:5px 0}
-.ix-back:hover,.ix-link:hover {color:white;text-decoration:underline}
+.ix-back:hover,.ix-link:hover {color:var(--color-text);text-decoration:underline}
 .ix-footer {border-top:1px solid var(--approved-strong-rule);margin-top:24px;padding-top:15px;justify-content:space-between}
 .ix-advance {margin-left:auto;gap:20px}
 .ix-summary {margin:0;background:var(--approved-field-background);border:1px solid var(--line);border-radius:7px;padding:3px 12px}
@@ -568,6 +568,7 @@ html[data-workbench-theme="light"] #intake-view {
 #intake-view[data-report-view] :is(.ix-layout,.ix-work,#ix-pane) {
   display:flex;
   flex-direction:column;
+  align-items:stretch;
   flex:1;
   padding:0;
   min-height:0;
@@ -620,3 +621,37 @@ html[data-workbench-theme="light"] #intake-view {
 .ix-evidence-table :is(th,td) {padding:7px;border-bottom:1px solid var(--line);text-align:start}
 .ix-evidence-files {padding-inline-start:22px;margin-block:8px}
 #ix-pane pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:28rem;overflow:auto}
+
+.ix-evidence-stage {
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) minmax(0,1.7fr);
+  align-items:stretch;
+  color-scheme:dark;
+  min-width:0;
+  overflow:hidden;
+  border:1px solid var(--approved-evidence-border);
+  border-radius:9px;
+  background:var(--approved-evidence-paper);
+  color:var(--approved-evidence-ink);
+}
+.ix-stage-intro {padding:14px;min-width:0}
+.ix-stage-intro .ix-hint {color:var(--approved-evidence-muted)}
+.ix-stage-intro .ix-summary {background:transparent;border-color:var(--approved-evidence-border)}
+.ix-stage-intro .ix-summary > div {border-color:var(--approved-evidence-border)}
+.ix-stage-intro .ix-summary :is(dt,dd) {color:var(--approved-evidence-ink)}
+.ix-stage-instrument {min-width:0;display:grid;align-content:center;padding:8px 12px 8px 0}
+.ix-stage-instrument canvas {display:block;width:100%;height:clamp(170px,16vw,220px)}
+.ix-stage-controls {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:6px 0;
+  border-top:1px solid var(--approved-evidence-border);
+  font:12px var(--mono);
+}
+.ix-stage-controls label {display:flex;align-items:center;margin-inline-start:auto;gap:8px;color:var(--approved-evidence-ink)}
+.ix-stage-controls .ix-field input {width:clamp(45px,12vw,130px);accent-color:var(--approved-evidence-accent)}
+@media (max-width:660px) {
+  .ix-evidence-stage {grid-template-columns:1fr}
+  .ix-stage-instrument {padding:8px}
+}

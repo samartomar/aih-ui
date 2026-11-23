@@ -16,6 +16,12 @@ export function renderCatalog(host, api, current, update) {
   kinds.append(new Option('All kinds', ''));
   for (const kind of new Set(data.items.map(item => item.kind))) kinds.append(new Option(kind, kind));
   filters.append(field('Search Catalog', search), field('Framework', frameworks), field('Kind', kinds));
+  const compare = node('details', null, 'ix-evidence-fold');
+  const compareSummary = node('summary', 'Compare Catalog items (0)');
+  const differences = checkbox('Show differences only', false, renderComparison);
+  const comparison = node('div', null, 'ix-compare-grid');
+  compare.append(compareSummary, differences, comparison);
+  const pinned = new Map();
   let page = 0;
   let request = 0;
   const selected = new Set(current);
@@ -43,6 +49,38 @@ export function renderCatalog(host, api, current, update) {
     }
   }
 
+  function renderComparison() {
+    const entries = [...pinned.values()];
+    compareSummary.textContent = 'Compare Catalog items (' + entries.length + ')';
+    comparison.replaceChildren();
+    if (!entries.length) {
+      comparison.append(hint('Pin up to three items to compare.'));
+      return;
+    }
+    const rows = [
+      ['Framework', item => item.frameworkName],
+      ['Kind', item => item.kind],
+      ['Description', item => item.description || 'Not supplied'],
+      ['Published revision', item => item.root?.releaseSha256 ?? item.framework ?? 'Not supplied'],
+    ];
+    const visible = differences.querySelector('input').checked && entries.length > 1
+      ? rows.filter(([, value]) => new Set(entries.map(value)).size > 1)
+      : rows;
+    for (const item of entries) {
+      const remove = action('Remove from comparison', () => togglePin(item));
+      comparison.append(section(item.title, visible.length ? facts(visible.map(([title, value]) =>
+        [title, value(item)])) : hint('The displayed fields match.'), remove));
+    }
+  }
+
+  function togglePin(item) {
+    if (pinned.has(item.id)) pinned.delete(item.id);
+    else if (pinned.size < 3) pinned.set(item.id, item);
+    renderComparison();
+    render();
+    compareSummary.focus();
+  }
+
   function render() {
     const q = search.value.trim().toLowerCase();
     const items = data.items.filter(item => (!frameworks.value || item.framework === frameworks.value) &&
@@ -60,7 +98,12 @@ export function renderCatalog(host, api, current, update) {
       });
       const copy = node('div', null, 'ix-stack');
       copy.append(label, hint(item.frameworkName + ' · ' + item.kind));
-      row.append(copy, action('Inspect', () => inspect(item)));
+      const controls = node('div', null, 'ix-buttons');
+      const pin = action(pinned.has(item.id) ? 'Unpin' : 'Pin for comparison', () => togglePin(item));
+      pin.setAttribute('aria-label', (pinned.has(item.id) ? 'Unpin ' : 'Pin for comparison: ') + item.title);
+      pin.disabled = !pinned.has(item.id) && pinned.size >= 3;
+      controls.append(action('Inspect', () => inspect(item)), pin);
+      row.append(copy, controls);
       result.append(row);
     }
     if (maxPage > 0) {
@@ -78,6 +121,7 @@ export function renderCatalog(host, api, current, update) {
     control.addEventListener('input', () => { page = 0; render(); });
   }
   grid.append(result, inspector);
-  host.append(filters, grid);
+  host.append(filters, compare, grid);
+  renderComparison();
   render();
 }

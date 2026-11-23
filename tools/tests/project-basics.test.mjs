@@ -28,7 +28,7 @@ test('Project basics offers the project files, the shared one first, and never a
 });
 
 // The page's own markup.
-const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+const html = readFileSync(new URL('../../src/classic.html', import.meta.url), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
 const section = id => {
   const start = html.indexOf(`id="${id}"`), tag = html.lastIndexOf('<', start), name = /<(\w+)/.exec(html.slice(tag))[1];
   let depth = 0;

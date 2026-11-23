@@ -1,7 +1,9 @@
+import {checkedFiles} from './source-files.js';
 import { action, downloadJson, facts, fileField, hint, node, readStored, section, store } from './dom.js';
 
 const format = 'aih-workbench-team-selection/1';
 const key = 'aih-workbench-local-policy-v1';
+const importedKey = 'aih-workbench-imported-policy-v1';
 
 function matchingVersion(current, expected) {
   return typeof current === 'string' && current === expected;
@@ -17,7 +19,9 @@ export function checkSelection(selection, data) {
   for (const [name, version] of Object.entries(selection.versions)) {
     if (!matchingVersion(data.packages?.[name]?.version, version)) issues.push('The installed ' + name + ' version does not match this selection.');
   }
-  if (!Object.keys(selection.versions).length) issues.push('Pin the installed package versions.');
+  const available = Object.entries(data.packages ?? {}).filter(([name, info]) =>
+    ['core', 'catalog', 'scan'].includes(name) && typeof info?.version === 'string');
+  if (!available.length || available.some(([name]) => !selection.versions[name])) issues.push('Pin the installed package versions.');
   return issues;
 }
 
@@ -32,21 +36,22 @@ function normalize(value) {
   }
   return {
     format, organization: value.organization.trim(), owner: value.owner.trim(),
-    source: value.source.trim(), clients: [...new Set(value.clients)],
+    source: value.source.trim(), files: checkedFiles(value.files), clients: [...new Set(value.clients)],
     items: [...new Set(value.items)], versions: { ...value.versions },
   };
 }
 
 export function selectionFor(draft) {
-  return normalize({ format, organization: draft.organization, owner: draft.owner, source: draft.source,
+  return normalize({ format, organization: draft.organization, owner: draft.owner, source: draft.source, files: draft.files,
     clients: draft.clients, items: draft.items, versions: draft.versions });
 }
 
 export function publishedSelection() {
-  const published = readStored(key, null);
+  const shared = readStored(key, null);
+  const published = shared ?? readStored(importedKey, null);
   if (!published || typeof published.revision !== 'string') return null;
   try {
-    return { revision: published.revision, selection: normalize(published.selection) };
+    return { revision: published.revision, selection: normalize(published.selection), origin: shared ? 'shared locally' : 'imported' };
   } catch {
     return null;
   }
@@ -82,6 +87,7 @@ export function reviewTeamSelection(host, api, publish = false) {
     ['Policy owner', current.owner || 'Required'],
     ['CLI targets', String(current.clients.length)],
     ['Exact Catalog items', String(current.items.length)],
+    ['Supporting files shared with members', current.files.map(file=>file.name).join(', ') || 'None'],
     ['Current local revision', latest?.revision],
   ]);
   const list = node('ul');
@@ -128,6 +134,7 @@ export function showEnterprisePolicy(host, api) {
       ['Organization', published.selection.organization],
       ['Policy owner', published.selection.owner],
       ['Local revision', published.revision],
+      ['Source', published.origin],
       ['CLI targets', String(published.selection.clients.length)],
       ['Catalog items', String(published.selection.items.length)],
     ]));
@@ -135,12 +142,16 @@ export function showEnterprisePolicy(host, api) {
   } else {
     output.append(hint('There is no organization selection available in this browser.'));
   }
+  if (published?.origin === 'shared locally') {
+    host.append(output);
+    return;
+  }
   output.append(fileField('Open team selection', '.json,application/json', async file => {
     if (file.size > 1024 * 1024) throw new Error('Choose a team selection smaller than 1 MB.');
     const selection = normalize(JSON.parse(await file.text()));
     const issues = checkSelection(selection, fullData);
     if (issues.length) throw new Error(issues.join(' '));
-    if (!store(key, { revision: crypto.randomUUID(), selection })) throw new Error('The browser could not open this selection.');
+    if (!store(importedKey, { revision: crypto.randomUUID(), selection })) throw new Error('The browser could not open this selection.');
     api.refresh();
     api.status('Team selection opened for this browser.');
   }, api.status));

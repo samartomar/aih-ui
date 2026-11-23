@@ -1,4 +1,4 @@
-import { link, readStored, store } from './dom.js';
+import { action, link, readStored, store } from './dom.js';
 import { loadWorkbench } from './host.js';
 import { make as icon } from './icons.js';
 import { mount as mountScene } from './scene.js';
@@ -142,6 +142,7 @@ function render(focus = false, refresh = false) {
   const roleData = role === 'enterprise' ? restrictEnterprise(data, published) : data;
   const api = {
     role, route, status, data: roleData, fullData: data, published, draft,
+    currentData: () => role === 'enterprise' ? restrictEnterprise(data, publishedSelection()) : data,
     refresh() { render(false, true); },
     change(key, value) { draft[key] = value; saveDraft(draft); },
     replaceDraft(value) { saveDraft(value); render(false, true); },
@@ -157,6 +158,27 @@ function render(focus = false, refresh = false) {
   }
   const footer = $('ix-footer');
   footer.replaceChildren();
+  if (!special) {
+    const undoKey = draftKey + '-before-reset';
+    footer.append(action('Reset draft', () => {
+      if (!store(undoKey, readStored(draftKey, emptyDraft())) || !store(draftKey, emptyDraft())) {
+        status('This browser could not reset the draft.');
+        return;
+      }
+      render(false, true);
+      status('Draft reset. Use Undo reset to restore it.');
+    }));
+    if (readStored(undoKey, null)) footer.append(action('Undo reset', () => {
+      const saved = readStored(undoKey, null);
+      if (!saved || !store(draftKey, saved)) {
+        status('This browser could not restore the draft.');
+        return;
+      }
+      store(undoKey, null);
+      render(false, true);
+      status('Draft restored.');
+    }));
+  }
   if (index > 0) footer.append(link('← Back', route(steps[index - 1].id), 'ix-back'));
   if (index >= 0 && steps[index + 1]) {
     const advance = link('Continue', route(steps[index + 1].id), 'ix-primary ix-advance');
@@ -182,8 +204,10 @@ window.addEventListener('hashchange', () => render(true));
 render();
 loadWorkbench().then(result => {
   Object.assign(data, result);
-  render(false, true);
+  if (current?.step.id === 'reports') window.dispatchEvent(new Event('aih-workbench-data'));
+  else render(false, true);
 }).catch(() => {
   data.gaps = { catalog: 'The Workbench host could not be reached.', clients: 'Core is unavailable.', tools: 'Core is unavailable.' };
-  render(false, true);
+  if (current?.step.id === 'reports') window.dispatchEvent(new Event('aih-workbench-data'));
+  else render(false, true);
 });

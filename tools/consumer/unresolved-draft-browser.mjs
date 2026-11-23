@@ -32,7 +32,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     const page = await context.newPage(); observed = page; page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 500) failedResponses.push(`${response.status()} ${response.url()}`); });
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();

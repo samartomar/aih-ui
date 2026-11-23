@@ -2,11 +2,12 @@ import { action, checkbox, downloadJson, facts, field, fileField, hint, input, n
 import { make as icon } from './icons.js';
 
 const libraryKey = 'aih-workbench-profiles-v1';
+const sharedKey = 'aih-workbench-shared-profiles-v1';
 const format = 'aih-workbench-profile/1';
 const priorFormat = 'aih-portable-profile/1';
 const optionalText = value => typeof value === 'string' ? value : '';
 
-function readProfile(value) {
+export function readProfile(value) {
   if (value?.format === priorFormat) {
     const { id, name, description, catalogIds, firstTask, instructions, byo } = value;
     value = { format, id: optionalText(id) || crypto.randomUUID(), name, description: optionalText(description),
@@ -26,46 +27,63 @@ function readProfile(value) {
       if (!entry || typeof entry !== 'object') return [];
       return [{ name: optionalText(entry.name), kind: optionalText(entry.kind), source: optionalText(entry.source), revision: optionalText(entry.revision) }];
     }) : [] };
-
 }
 
-function library() {
-  const saved = readStored(libraryKey, []);
+function library(key = libraryKey) {
+  const saved = readStored(key, []);
   if (!Array.isArray(saved)) return [];
   return saved.flatMap(profile => {
     try { return [readProfile(profile)]; } catch { return []; }
   });
 }
 
-function put(profile) {
-  return store(libraryKey, [...library().filter(old => old.id !== profile.id), profile]);
+function put(profile, key = libraryKey) {
+  return store(key, [...library(key).filter(old => old.id !== profile.id), profile]);
 }
 
 export function renderProfiles(host, api) {
-  const shelf = node('div', null, 'ix-profile-grid');
+  const shelf = node('ul', null, 'ix-profile-grid');
   const inspector = section(null);
-  const privateNote = hint('Profiles you create or import here stay in this browser. Export a copy to share it.');
+  const sources = new Map([['saved', 'Saved in this browser'], ['shared', 'Shared in this browser'], ['host', 'Host library']]);
+  const filter = node('select');
+  filter.append(new Option('All sources', ''));
+  for (const [id, label] of sources) filter.append(new Option(label, id));
+  const privateNote = hint('Local publication makes a copy available to the other roles in this browser. Export a Profile file to share it elsewhere.');
+  let hostLibrary = [];
+  let hostStatus = 'Loading the host library…';
   let selected = null;
 
   function showShelf() {
-    const profiles = library();
+    const collections = [
+      ['saved', library()],
+      ['shared', library(sharedKey)],
+      ['host', hostLibrary],
+    ];
+    const profiles = collections.filter(([kind]) => !filter.value || filter.value === kind)
+      .flatMap(([kind, entries]) => entries.map(profile => ({ kind, profile })));
     shelf.replaceChildren();
-    for (const profile of profiles) {
+    for (const { kind, profile } of profiles) {
+      const key = kind + ':' + profile.id;
       const button = action(profile.name, () => {
-        selected = profile.id;
+        selected = key;
         showShelf();
-        preview(profile);
+        preview(profile, kind);
       });
       button.className = 'ix-profile-card';
-      button.setAttribute('aria-pressed', String(profile.id === selected));
-      button.prepend(icon('book', { size: 21 }));
+      button.setAttribute('aria-pressed', String(key === selected));
+      const cover = node('span', null, 'ix-profile-cover');
+      cover.append(icon('book', { size: 21 }), icon('arrow-up-right', { size: 13 }));
+      button.prepend(cover);
       if (profile.description) button.append(hint(profile.description));
-      shelf.append(button);
+      button.append(hint(sources.get(kind)));
+      const entry = node('li');
+      entry.append(button);
+      shelf.append(entry);
     }
-    if (!profiles.length) shelf.append(hint(api.data.gaps.profiles ?? 'Your Profile library is empty.'));
+    if (!profiles.length) shelf.append(node('li', filter.value === 'host' ? hostStatus : 'No Profiles in this view.', 'ix-hint'));
   }
 
-  function preview(profile) {
+  function preview(profile, kind = 'saved') {
     const items = new Map(api.data.items.map(item => [item.id, item]));
     const resolve = id => {
       if (items.has(id)) return items.get(id);
@@ -76,6 +94,7 @@ export function renderProfiles(host, api) {
     const list = node('ul');
     for (const id of profile.items) list.append(node('li', resolve(id)?.title ?? id + ' · unavailable'));
     inspector.replaceChildren(node('h3', profile.name), hint(profile.description), facts([
+      ['Source', sources.get(kind)],
       ['CLI targets', profile.clients.map(id => clients.get(id) ?? id + ' · unavailable').join(', ') || 'None'],
       ['Catalog items', String(profile.items.length)],
       ['First task', profile.firstTask || null],
@@ -83,7 +102,22 @@ export function renderProfiles(host, api) {
       ['Own sources', profile.byo?.map(source => source.name || source.source).filter(Boolean).join(', ') || null],
     ]), list);
     const buttons = node('div', null, 'ix-buttons');
-    buttons.append(action('Edit Profile', () => edit(profile)), action('Export Profile', () => downloadJson('workbench-profile.json', profile)));
+    buttons.append(action(kind === 'saved' ? 'Edit Profile' : 'Copy to edit', () => edit(kind === 'saved' ? profile : { ...profile, id: crypto.randomUUID() })),
+      action('Export Profile', () => downloadJson('workbench-profile.json', profile)));
+    if (kind === 'saved') {
+      const publish = action('Publish Profile in this browser', () => {
+        if (!put(profile, sharedKey)) {
+          api.status('The browser could not publish this Profile.');
+          return;
+        }
+        selected = 'shared:' + profile.id;
+        filter.value = 'shared';
+        showShelf();
+        preview(profile, 'shared');
+        api.status('Profile published in this browser.');
+      });
+      buttons.append(publish);
+    }
     if (api.role !== 'admin') buttons.prepend(action('Use this Profile', () => {
       if (api.role === 'enterprise' && (!api.published || profile.items.some(id => !resolve(id)) ||
         profile.clients.some(id => !clients.has(id)))) {
@@ -108,7 +142,8 @@ export function renderProfiles(host, api) {
       byo: api.draft.source ? [{ name: '', kind: '', source: api.draft.source, revision: '' }] : [],
     };
     const name = input(draft.name, value => { draft.name = value; });
-    const chooser = node('div', null, 'ix-options');
+    const chooser = node('fieldset', null, 'ix-section ix-client-options');
+    chooser.append(node('legend', 'CLI targets'));
     for (const client of api.data.clients) chooser.append(checkbox(client.name, draft.clients.includes(client.id), checked => {
       draft.clients = checked ? [...draft.clients, client.id] : draft.clients.filter(id => id !== client.id);
     }));
@@ -117,13 +152,14 @@ export function renderProfiles(host, api) {
       field('Description', input(draft.description, value => { draft.description = value; }, true)),
       field('First task', input(draft.firstTask, value => { draft.firstTask = value; })),
       field('Supporting instructions', input(draft.instructions, value => { draft.instructions = value; }, true)),
-      field('CLI targets', chooser),
+      chooser,
       hint(draft.items.length + ' Catalog items from the saved selection'),
       action('Save Profile', () => {
         draft.name = draft.name.trim();
         if (!draft.name) { name.focus(); api.status('Enter a Profile name.'); return; }
         if (!put(draft)) { api.status('The browser could not save this Profile.'); return; }
-        selected = draft.id;
+        selected = 'saved:' + draft.id;
+        filter.value = 'saved';
         showShelf();
         preview(draft);
         api.status('Profile saved in this browser.');
@@ -138,10 +174,31 @@ export function renderProfiles(host, api) {
       const profile = readProfile(JSON.parse(await file.text()));
       if (library().some(entry => entry.id === profile.id)) profile.id = crypto.randomUUID();
       if (!put(profile)) throw new Error('The browser could not save this Profile.');
-      selected = profile.id;
+      selected = 'saved:' + profile.id;
+      filter.value = 'saved';
       showShelf();
       preview(profile);
     }, api.status));
-  host.append(section(null, controls, privateNote, shelf), inspector);
+  filter.addEventListener('change', showShelf);
+  host.append(section(null, controls, field('Profile source', filter), privateNote, shelf), inspector);
   showShelf();
+  fetch('/api/approved-profiles', { signal: api.signal }).then(async response => {
+    if (!response.ok) throw new Error('Profile host unavailable.');
+    const result = await response.json();
+    const unique = new Map();
+    for (const value of result.profiles ?? []) {
+      try {
+        const profile = readProfile(value);
+        if (!unique.has(profile.id)) unique.set(profile.id, profile);
+      } catch { /* An invalid entry cannot populate the library. */ }
+    }
+    hostLibrary = [...unique.values()];
+    hostStatus = result.status === 'unconfigured' ? 'No host Profile library is configured.' :
+      result.status === 'ready' ? 'The host Profile library is empty.' : 'The host Profile library is unavailable or incomplete.';
+    showShelf();
+  }).catch(() => {
+    if (api.signal.aborted) return;
+    hostStatus = 'The host Profile library is unavailable.';
+    showShelf();
+  });
 }

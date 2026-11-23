@@ -8,7 +8,7 @@ export async function openAuthorityPage({ browser, origin, role }) {
   // The demo has no browser network dependency outside its loopback Workbench.
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage();
-  await page.goto(origin + '/');
+  await page.goto(origin + '/classic.html');
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible() && role === 'admin') {
     await page.getByRole('radio', { name: /Enterprise/ }).check(); await page.locator('#setup-next').click();

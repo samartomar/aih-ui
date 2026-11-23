@@ -329,6 +329,38 @@ export function renderEmptyReport(title = DEFAULT_TITLE) {
   return renderEvidenceShell(title, banner);
 }
 
+export function renderWorkbenchOverview({ catalog, clients, tools, packages }, title = DEFAULT_TITLE) {
+  const knownCatalog = Array.isArray(catalog);
+  const groups = new Map();
+  for (const item of catalog ?? []) {
+    const name = item.frameworkName || 'Other Catalog content';
+    groups.set(name, (groups.get(name) ?? 0) + 1);
+  }
+  const rows = [...groups.entries()].sort(([first], [second]) => first.localeCompare(second));
+  const bars = rows.map(([name, count]) => `<div class="mat-row">
+    <div class="mat-bar-wrap"><span class="mat-label">${esc(name)}</span>
+    <span class="mat-track"><span class="mat-fill" style="width:${Math.round(count / catalog.length * 100)}%"></span></span></div>
+    <span class="mat-val">${count}</span></div>`).join('');
+  const left = `<div class="card hero-radar"><span class="hero-eyebrow">Catalog items by framework</span>
+    <div class="mat" style="width:100%">${bars || '<p class="method">No Catalog items are available in this workspace.</p>'}</div></div>`;
+  const vitals = [[catalog, 'Catalog items'], [clients, 'CLI targets'], [tools, 'Core tools']].map(([list, label]) =>
+    `<div class="vital"><span class="v">${Array.isArray(list) ? list.length : 'n/a'}</span><span class="l">${label}</span></div>`).join('');
+  const right = `<div class="card hero-narrative"><h2 class="hero-headline">Workspace overview</h2>
+    <p class="hero-sub">Catalog selections and Core interfaces available to this role.</p>
+    <div class="hero-vitals">${vitals}</div></div>`;
+  const versions = Object.entries(packages ?? {}).map(([name, value]) => `<dt>${esc(name)}</dt><dd>${esc(value.version)}</dd>`).join('');
+  const adoption = versions ? { state: 'live', html: head('06', 'live', 'host package metadata', 'Setup and tooling',
+    'Package versions reported by the current Workbench host.', '') +
+    `<div class="grid"><div class="card span-12"><div class="card-head"><h3>Installed packages</h3></div>
+    <div class="card-body"><dl class="kv">${versions}</dl></div></div></div>` } : undefined;
+  const live = knownCatalog || Array.isArray(clients) || Array.isArray(tools) ? {
+    'sec-hero': { state: 'live', html: left + right },
+    ...(adoption ? { 'sec-adoption': adoption } : {}),
+  } : {};
+  const banner = '<div class="whatsnew"><span class="tag">WORKBENCH</span><span>Current host inventory. Open a saved Core snapshot to see recorded checks.</span></div>';
+  return renderEvidenceShell(title, banner, live);
+}
+
 function renderEvidenceShell(title, banner, live = {}) {
   const sections = {};
   let html = titledShell(title);

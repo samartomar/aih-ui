@@ -1,6 +1,5 @@
 import { createAuthoringClient } from '../app/authoring-client.js';
 import { publishedClients } from '../app/core-targets.js';
-import { saveDraftHandoff } from '../app/draft-session.js';
 import { projectItems } from '../catalog/authoring-model.js';
 import { sourcePresentation } from '../catalog/source-facts.js';
 
@@ -108,7 +107,9 @@ export async function loadWorkbench() {
     }
   }
 
-  return { ...content, clients, tools, gaps, repositoryScanAvailable:readOnly, packages: Object.fromEntries(packageList.map(pkg => [pkg.name, pkg])),
+  const hostMode = readOnly ? 'read-only' : catalog.status === 'fulfilled' && Array.isArray(catalog.value?.items) ? 'legacy' : 'unavailable';
+  return { ...content, clients, tools, gaps, hostMode, repositoryScanAvailable: readOnly,
+    packages: Object.fromEntries(packageList.map(pkg => [pkg.name, pkg])),
     inspectTools: () => read('/api/tool-inspection').catch(() => failed('Core could not inspect this machine.')),
-    inspectItem, previewPlan, openPlan: saveDraftHandoff };
+    inspectItem, previewPlan };
 }

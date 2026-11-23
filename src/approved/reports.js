@@ -1,12 +1,13 @@
-import { renderDesignSample, renderEmptyReport } from '../report/render.js';
-import { action, download, fileField, hint, link, node, section } from './dom.js';
+import { renderDesignSample, renderWorkbenchOverview } from '../report/render.js';
+import { action, download, facts, fileField, hint, link, node, section } from './dom.js';
 
-const themeStyles = fetch('/styles/approved-report.css').then(response => response.ok ? response.text() : '').catch(() => '');
+const themeStyles = Promise.all(['/styles/tokens.css', '/styles/approved-report.css'].map(path =>
+  fetch(path).then(response => response.ok ? response.text() : '').catch(() => ''))).then(files => files.join('\n'));
 const theme = () => document.documentElement.dataset.workbenchTheme === 'light' ? 'light' : 'dark';
 
 async function themed(html) {
   const styles = await themeStyles;
-  return html.replace('<html lang="en">', '<html lang="en" data-theme="' + theme() + '">')
+  return html.replace('<html lang="en">', '<html lang="en" data-v9-report data-theme="' + theme() + '">')
     .replace('</head>', () => '<style>' + styles + '</style></head>');
 }
 
@@ -17,7 +18,20 @@ export function renderReports(host, api) {
   frame.title = 'V9 report snapshot';
   frame.setAttribute('sandbox', 'allow-scripts');
   let snapshot, saved, request = 0;
-  let documentHtml = renderEmptyReport('V9 Developer Console');
+  const overview = () => {
+    const data = api.currentData();
+    return renderWorkbenchOverview({
+      catalog: data.gaps.catalog ? null : data.items,
+      clients: data.gaps.clients ? null : data.clients,
+      tools: data.gaps.tools ? null : data.tools,
+      packages: data.packages,
+    }, 'V9 Developer Console');
+  };
+  let documentHtml = overview();
+  let visible = false;
+  window.addEventListener('aih-workbench-data', () => {
+    if (!visible && !saved && !snapshot) show(overview());
+  }, { signal: api.signal });
 
   async function show(html) {
     documentHtml = html;
@@ -36,11 +50,10 @@ export function renderReports(host, api) {
   const viewObserver = new MutationObserver(updateTheme);
   viewObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-workbench-theme'] });
   api.signal.addEventListener('abort', () => viewObserver.disconnect(), { once: true });
-  let visible = false;
   const showcase = action('View labelled design sample', async () => {
     visible = !visible;
     showcase.textContent = visible ? 'Close design sample' : 'View labelled design sample';
-    const html = visible ? renderDesignSample('V9 Developer Console') : saved ?? renderEmptyReport('V9 Developer Console');
+    const html = visible ? renderDesignSample('V9 Developer Console') : saved ?? overview();
     await show(html);
   });
   const save = action('Save HTML', async () => download('workbench-report.html', await themed(saved), 'application/octet-stream'));
@@ -85,11 +98,11 @@ export function renderReports(host, api) {
     saved = null;
     visible = false;
     showcase.textContent = 'View labelled design sample';
-    show(renderEmptyReport('V9 Developer Console'));
+    show(overview());
     status.textContent = file.name + ' is ready for validation.';
   }, api.status));
   const buttons = node('div', null, 'ix-buttons');
-  buttons.append(render, save, showcase, link('Machine readiness report', '/report.html'));
+  buttons.append(render, save, showcase, link('Machine checks', api.route('diagnostics')));
   body.append(buttons);
   controls.append(node('summary', 'Report controls'), body);
   toolbar.append(controls);
@@ -99,7 +112,49 @@ export function renderReports(host, api) {
 }
 
 export function renderDiagnostics(host, api) {
-  host.append(section('Machine checks', hint('Check local tools and review the observations recorded by Core.'),
-    link('Open machine readiness', '/readiness.html')),
-    section('Reports', link('Open a saved V9 snapshot', api.route('reports'), 'ix-secondary')));
+  const result = node('div', null, 'ix-stack');
+  result.setAttribute('aria-live', 'polite');
+  const inspect = action('Inspect this machine', async () => {
+    inspect.disabled = true;
+    result.replaceChildren(hint('Running Core inspection…'));
+    const answer = await api.data.inspectTools();
+    if (api.signal.aborted) return;
+    if (answer.state !== 'inspected') {
+      result.replaceChildren(hint(answer.reason ?? 'Core inspection is unavailable.'));
+      inspect.disabled = false;
+      return;
+    }
+    result.replaceChildren(facts([
+      ['Inspection result', answer.status],
+      ['Core version', answer.package?.version ?? api.data.packages?.core?.version],
+    ]));
+    const tools = node('ul');
+    for (const tool of answer.tools ?? []) {
+      const label = tool.label ?? tool.id;
+      const status = tool.state ?? tool.host?.status;
+      const selection = tool.selection === 'requested' ? 'requested check' : undefined;
+      const version = tool.host?.installedVersion?.version;
+      tools.append(node('li', [label, status, selection, version].filter(Boolean).join(' · ')));
+    }
+    if (tools.childElementCount) result.append(node('h4', 'Tool states'), tools);
+    const observations = [...(answer.observations ?? []).map(row => row.detail),
+      ...(answer.diagnostics ?? []).map(row => row.message ?? row.reason)].filter(Boolean);
+    if (observations.length) {
+      const list = node('ul');
+      for (const observation of observations) list.append(node('li', observation));
+      result.append(node('h4', 'Observations and diagnostics'), list);
+    }
+  }, true);
+  inspect.disabled = !api.data.inspectTools;
+  const scope = api.data.hostMode === 'read-only'
+    ? 'Core checks Node and Git offline and reports the tool states it observes.'
+    : 'Core reads the available host and tool observations.';
+  const machine = section('Machine checks', hint(scope), inspect, result);
+  host.append(machine, section('Reports', link('Open a saved V9 snapshot', api.route('reports'))));
+  if (api.data.hostMode === 'legacy') {
+    fetch('/api/readiness-report', { signal: api.signal }).then(response => {
+      if (response.ok && !api.signal.aborted) machine.append(link('Open machine readiness', '/readiness.html'),
+        link('Open machine readiness report', '/report.html'));
+    }).catch(() => {});
+  }
 }

@@ -17,7 +17,7 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
     const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
     page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(origin + '/');
+    await page.goto(origin + '/classic.html');
     await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();

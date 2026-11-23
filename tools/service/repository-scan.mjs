@@ -10,7 +10,9 @@ function inside(root, file) {
 export async function repositoryScan({ folder }) {
   const [{ scan }, { readSummary, readFindings }] = await Promise.all([import('@aihq/scan/host'), import('@aihq/scan/read')]);
   if (typeof folder !== 'string' || !isAbsolute(folder) || /[\x00-\x1f]/.test(folder)) throw Error('Choose an absolute project folder.');
+  if (process.platform === 'win32' && !/^[a-z]:[\\/]/i.test(folder)) throw Error('Choose a folder on a local drive.');
   const root = await realpath(folder);
+  if (process.platform === 'win32' && !/^[a-z]:[\\/]/i.test(root)) throw Error('Choose a folder on a local drive.');
   const parent = await realpath(tmpdir());
   if (!(await stat(root)).isDirectory() || inside(root, parent)) throw Error('Choose a project folder outside the temporary output directory tree.');
   const temp = await mkdtemp(join(parent, 'aih-ui-scan-'));

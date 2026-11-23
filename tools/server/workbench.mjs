@@ -2,6 +2,7 @@ import { createApi } from './api.mjs';
 import { createApprovedAdapter } from './approved.mjs';
 import { createAuthoringAdapter, journalFrictionEvidence } from './authoring.mjs';
 import { createBatchAdapter } from './batch.mjs';
+import { createPortableProfiles } from './portable-profiles.mjs';
 import { createReadinessAdapter } from './readiness.mjs';
 import { createReportAdapter } from './report.mjs';
 import { createStaticServer } from './static.mjs';
@@ -18,6 +19,7 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
     await createAuthoringAdapter(consumerDir, { coreState, frameworkFixtureInventories, frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);
   const report = createReportAdapter(consumerDir);
+  const profiles = createPortableProfiles();
   // Started now and answered when done, so the page can show it loading; it never delays the server.
   const contractCheck = callServiceAsync(consumerDir, { op: 'contractCheck' }).then(contractCheckSummary);
   // Asked for when the page first loads and kept for this host's life: a restart reads Core again.
@@ -26,7 +28,7 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const toolInspection = once(() => callServiceAsync(consumerDir, { op: 'toolInspection' }).then(toolInspectionSummary));
   const existingApi = createApi({ summary, settingsPath, contractCheck, tools, toolInspection });
   const server = createStaticServer(runDir, async (request, response, pathname) => {
-    try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await report.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
+    try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await report.handle(request, response, pathname) || await profiles(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
     catch (error) {
       response.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `Authoring host unavailable: ${error.message}` })); return true;
     }

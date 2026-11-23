@@ -55,7 +55,7 @@ function ancestry(html) {
   }
   return found;
 }
-const page = ancestry(readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8'));
+const page = ancestry(readFileSync(new URL('../../src/classic.html', import.meta.url), 'utf8'));
 const inside = (id, container) => { assert.ok(page.has(id), `${id} is on the page`); return page.get(id).includes(container); };
 
 test('the catalog Advanced section holds the kind tiles, the catalog scopes, the Policy workspace links, Scan Review and the catalog target', () => {
@@ -74,12 +74,12 @@ test('one Settings menu holds the workspace actions, the mode, Check this machin
   assert.equal(inside('org-modal-trigger', 'workspace-actions'), false, 'the Settings button itself is in the header');
   // The role badge is not on the agreed list, so it stays in the header beside the product name, outside the menu.
   assert.equal(inside('workbench-role', 'workspace-actions'), false, 'the role badge is not moved into Settings');
-  const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../src/classic.html', import.meta.url), 'utf8');
   assert.match(/<header[\s\S]*?<\/header>/.exec(html)[0], /id="workbench-role"/, 'the role badge renders in the header');
 });
 
 test('the header has one button for your setup: Review Changes and Check Policy are not header buttons', () => {
-  const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../src/classic.html', import.meta.url), 'utf8');
   const header = /<header[\s\S]*?<\/header>/.exec(html)[0];
   assert.doesNotMatch(header, />\s*Review Changes\s*</);
   assert.doesNotMatch(header, />\s*Check Policy\s*</);
@@ -112,7 +112,7 @@ function defaultText(html) {
 }
 
 test('the default catalog screen uses plain words: no policy, pins, artifacts, digests, recipes or Prepare', () => {
-  const text = defaultText(readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8'));
+  const text = defaultText(readFileSync(new URL('../../src/classic.html', import.meta.url), 'utf8'));
   assert.doesNotMatch(text, ENGINE_WORDS);
   assert.match(text, /Choose content for your AI tool/);
 });

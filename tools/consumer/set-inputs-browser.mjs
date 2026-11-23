@@ -6,7 +6,7 @@ import { openPolicyAdvanced, openPolicyFileActions, closePolicyDrawer } from './
 const intentOf = value => value.records?.find(record => record.intent)?.intent ?? value.metadata?.['aih.workbench'];
 const choicesOf = value => intentOf(value).provenance.flatMap(source => source.materialSource.workbenchSetChoices?.choices ?? []);
 async function enter(page, origin, theme) {
-  await page.goto(origin + '/');
+  await page.goto(origin + '/classic.html');
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();

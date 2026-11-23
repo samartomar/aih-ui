@@ -29,7 +29,7 @@ async function openPage(browser, origin, theme, { touch = false, route } = {}) {
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   if (route) await page.route('**/api/contract-check', route);
-  await page.goto(origin + '/');
+  await page.goto(origin + '/classic.html');
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();

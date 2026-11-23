@@ -1,7 +1,9 @@
+import {checkedFiles, sourceFiles} from './source-files.js';
 import { action, checkbox, download, downloadJson, facts, field, fileField, hint, input, link, node, section } from './dom.js';
 import { repositoryScan } from './repository-scan.js';
 import { renderCatalog } from './catalog.js';
 import { showEnterprisePolicy, reviewTeamSelection } from './organization.js';
+import { renderToolSetup } from './tool-setup.js';
 import { renderScan } from './scan.js';
 
 const personalSteps = [
@@ -35,20 +37,22 @@ export function stepsFor(role) {
 
 const draftFormat = 'aih-workbench-setup/1';
 export const emptyDraft = () => ({
-  format: draftFormat, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', firstTask: '', tools: [], versions: {}, reviewed: '',
+  format: draftFormat, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, reviewed: '',
 });
 
 function cleanDraft(value) {
   if (value?.format !== draftFormat) throw new Error('Open a setup exported by this Workbench.');
   const draft = emptyDraft();
   for (const key of Object.keys(draft)) {
-    const field = value[key] ?? emptyDraft()[key];
-    if (Array.isArray(draft[key])) {
+    const field = value[key] ?? draft[key];
+    if (key === 'files') {
+      draft.files = checkedFiles(field);
+    } else if (Array.isArray(draft[key])) {
       if (!Array.isArray(field) || field.some(entry => typeof entry !== 'string')) throw new Error('Invalid setup selection.');
       draft[key] = [...new Set(field)];
-    } else if (key === 'versions') {
-      if (typeof field !== 'object' || Array.isArray(field) || Object.values(field).some(version => typeof version !== 'string')) throw new Error('Invalid version pins.');
-      draft.versions = { ...field };
+    } else if (key === 'versions' || key === 'bases') {
+      if (typeof field !== 'object' || Array.isArray(field) || Object.values(field).some(version => typeof version !== 'string')) throw new Error('Invalid selections.');
+      draft[key] = { ...field };
     } else {
       if (typeof field !== 'string') throw new Error('Invalid setup details.');
       draft[key] = field;
@@ -72,6 +76,37 @@ function clients(api) {
   return choices;
 }
 
+function targets(api) {
+  const panel = section('Choose CLI targets', clients(api));
+  const setup = section('Choose a starting framework');
+  function refresh() {
+    setup.replaceChildren(node('h3', 'Choose a starting framework'));
+    const chosen = api.data.clients.filter(client => api.draft.clients.includes(client.id));
+    if (!chosen.length) setup.append(hint('Select a CLI target to choose its starting framework.'));
+    for (const client of chosen) {
+      const select = node('select');
+      select.append(new Option('Choose later', ''));
+      for (const framework of api.data.frameworks) {
+        if (framework.state === 'ready' || api.data.items.some(item => item.framework === framework.id)) {
+          select.append(new Option(framework.name, framework.id));
+        }
+      }
+      const saved = api.draft.bases?.[client.id];
+      if (saved && !Array.from(select.options).some(option => option.value === saved)) {
+        const option = new Option('Saved framework is unavailable', saved);
+        option.disabled = true;
+        select.append(option);
+      }
+      select.value = saved ?? '';
+      select.addEventListener('change', () => api.change('bases', { ...api.draft.bases, [client.id]: select.value }));
+      setup.append(field(client.name + ' framework', select));
+    }
+  }
+  panel.addEventListener('change', refresh);
+  refresh();
+  return [panel, setup];
+}
+
 function files(api) {
   const buttons = node('div', null, 'ix-buttons');
   buttons.append(action('Export setup', () => downloadJson('workbench-setup.json', api.draft), true),
@@ -80,7 +115,8 @@ function files(api) {
       const draft = cleanDraft(JSON.parse(await file.text()));
       if (api.role === 'enterprise' && (
         draft.clients.some(id => !api.data.clients.some(client => client.id === id)) ||
-        draft.items.some(id => !api.data.items.some(item => item.id === id)))) {
+        draft.items.some(id => !api.data.items.some(item => item.id === id)) ||
+        Object.values(draft.bases).some(id => id && !api.data.frameworks.some(framework => framework.id === id)))) {
         throw new Error('This setup contains choices outside the current organization selection.');
       }
       if (api.role === 'admin') draft.reviewed = '';
@@ -96,8 +132,14 @@ function plan(host, api) {
   const eligibleClients = data.clients.filter(client => draft.clients.includes(client.id));
   const details = section('Draft selections', facts([
     ['CLI targets', eligibleClients.map(client => client.name).join(', ') || 'None'],
+    ['Starting frameworks', eligibleClients.flatMap(client => {
+      const saved = draft.bases[client.id];
+      if (!saved) return [];
+      return [client.name + ': ' + (data.frameworks.find(framework => framework.id === saved)?.name ?? 'Unavailable')];
+    }).join(', ') || null],
     ['Catalog items', selected.map(item => item.title).join(', ') || 'None'],
-    ['Tool preferences', draft.tools.map(id => data.tools.find(tool => tool.id === id)?.label ?? id).join(', ') || null],
+    ['Guides', draft.guides === 'included' ? 'Included in draft' : 'Omitted from draft'],
+    ['Tool Setup platform', draft.toolPlatform],
     ['Unavailable selections', selected.length === draft.items.length ? null : String(draft.items.length - selected.length)],
     ['First task', draft.firstTask || null],
     ['Personal files and supporting instructions', draft.source || draft.instructions ? 'Recorded in the setup file' : 'None'],
@@ -131,43 +173,6 @@ function plan(host, api) {
   host.append(details, section(null, preview, output));
 }
 
-function tools(host, api) {
-  const choices = node('div', null, 'ix-tool-list');
-  for (const tool of api.data.tools) {
-    const details = node('details', null, 'ix-tool-card');
-    const name = tool.label ?? tool.name ?? tool.id;
-    details.append(node('summary', name), facts([
-      ['Tool ID', tool.id], ['Surface', tool.surface],
-    ]), checkbox('Include ' + name + ' in the setup notes', api.draft.tools.includes(tool.id),
-      checked => setChoice(api, 'tools', tool.id, checked)));
-    choices.append(details);
-  }
-  if (!choices.childElementCount) choices.append(hint(api.data.gaps.tools ?? 'No tools were published.'));
-  const result = node('div', null, 'ix-stack');
-  const inspect = action('Check tools on this machine', async () => {
-    inspect.disabled = true;
-    result.replaceChildren(hint('Core is checking local tools…'));
-    try {
-      const report = await api.data.inspectTools();
-      result.replaceChildren(hint(report.reason ?? 'Core tool inspection results'));
-      const rows = report.tools ?? report.observations ?? report.value?.tools;
-      if (Array.isArray(rows)) {
-        for (const tool of rows) result.append(facts([
-          ['Tool', tool.label ?? tool.id], ['Status', tool.status ?? tool.state], ['Version', tool.version],
-        ]));
-      }
-    } catch (error) {
-      result.replaceChildren(hint(error.message));
-    } finally {
-      inspect.disabled = false;
-    }
-  });
-  inspect.disabled = !api.data.inspectTools;
-  host.append(section('Guides and supporting instructions',
-    field('Supporting instructions', input(api.draft.instructions, value => api.change('instructions', value), true))),
-  section('Core tools', inspect, result, choices));
-}
-
 export function renderJourney(host, step, api) {
   const { draft, data, role, change } = api;
   if (step === 'start') {
@@ -197,20 +202,18 @@ export function renderJourney(host, step, api) {
       section('Draft version pins', Object.keys(draft.versions).length ? facts(Object.entries(draft.versions)) : hint('No versions pinned.'), pin)),
       section('Catalog sources', data.frameworks.length ? facts(data.frameworks.map(f => [f.name, f.sha256 ?? f.state])) : hint(data.gaps.catalog ?? 'No sources are configured.')));
   } else if (step === 'clients') {
-    host.append(section('Choose CLI targets', clients(api)));
+    host.append(...targets(api));
   } else if (step === 'content' || step === 'catalog') {
     const panel = section('Select from Catalog');
     host.append(panel);
     renderCatalog(panel, api, draft.items, items => change('items', items));
-    if (step === 'content') host.append(section('Your files',
-      field('Source reference', input(draft.source, value => change('source', value)))));
+    if (step === 'content') sourceFiles(host, api);
   } else if (step === 'byo') {
-    host.append(section('Organization-owned source',
-      field('Source reference', input(draft.source, value => change('source', value)))));
+    sourceFiles(host, api);
   } else if (step === 'tools') {
-    tools(host, api);
+    renderToolSetup(host, api);
   } else if (step === 'scan' || step === 'self-scan') {
-    if (api.data.repositoryScanAvailable) repositoryScan(host);
+    if (api.data.repositoryScanAvailable) repositoryScan(host, api);
     renderScan(host, api);
   } else if (step === 'review') {
     reviewTeamSelection(host, api);

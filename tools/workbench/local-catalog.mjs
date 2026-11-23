@@ -56,8 +56,8 @@ function findingSource(finding, selected, cache, texts) {
 }
 
 // This input root is chosen by the host at startup. Requests select known IDs only.
-export async function createLocalCatalog(consumer, sourceCache) {
-  const root = resolve(consumer, 'public');
+export async function createLocalCatalog(consumer, sourceCache, inputConsumer = consumer) {
+  const root = resolve(inputConsumer, 'public');
   const cache = sourceCache ? JSON.parse(await readFile(sourceCache, 'utf8')) : null;
   const { api: reader } = await loadPublic(consumer, '@aihq/catalog', './reader');
   const { api: contracts } = await loadPublic(consumer, '@aihq/catalog', './contracts');
@@ -187,8 +187,8 @@ export async function createLocalCatalog(consumer, sourceCache) {
     if (result.status !== 'ok') return null;
     return {plan:result, profiles:[profiles.get(client)], contents:contents.filter(content => content.items.some(item => ids.has(item.id))), files:[]};
   }
-  function planTools(ids, client) {
-    const options = { scope: 'project', data: toolData.source, cell: platform, qualifications };
+  function planTools(ids, client, cell = platform) {
+    const options = { scope: 'project', data: toolData.source, cell, qualifications };
     const selected = [profiles.get(client)];
     if (ids.length === toolCombination.members.length && toolCombination.members.every(id => ids.includes(id))) {
       return reader.planRecipe(trio.recipe, contents, selected, {}, { ...options, source: toolData.source });
@@ -236,5 +236,20 @@ export async function createLocalCatalog(consumer, sourceCache) {
     const requestParts = admissionParts(result, ids, client);
     return { response, requestParts };
   }
-  return { catalog, evidence, plan, assets, readAsset, profilePreview, catalogPreview };
+  function previewTools(items, client, cell) {
+    if (!profiles.has(client) || !/^(windows|darwin|linux)-(x64|arm64)$/.test(cell)) {
+      throw invalid('Choose a published CLI target and platform.');
+    }
+    const ids = items.map(({ id, itemId }) => {
+      const entry = byId.get(itemId)?.entry;
+      const framework = frameworks.find(value => value.id === entry?.framework);
+      if (!entry?.setup || id !== `${framework?.sha256}/${itemId}`) {
+        throw invalid('This exact tool recipe is unavailable from the pinned Catalog source.');
+      }
+      return itemId;
+    });
+    return { ...planTools(ids, client, cell), source: toolData.source,
+      recipe: ids.length === toolCombination.members.length && toolCombination.members.every(id => ids.includes(id)) ? toolCombination.id : null };
+  }
+  return { catalog, evidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools };
 }

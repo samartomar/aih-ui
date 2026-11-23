@@ -77,7 +77,7 @@ try {
   };
 
   // The Workbench itself offers the entry.
-  await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/classic.html`, { waitUntil: 'domcontentloaded' });
   assert.equal(await page.locator('#nav-readiness').getAttribute('href'), 'readiness.html');
   await page.goto(`${origin}/readiness.html`, { waitUntil: 'domcontentloaded' });
   await page.locator('#repairs li button').waitFor();

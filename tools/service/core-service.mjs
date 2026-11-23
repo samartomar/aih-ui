@@ -21,6 +21,10 @@ const OPS = {
     const { repositoryScan } = await import('./repository-scan.mjs');
     return repositoryScan(request);
   },
+  async importRepositoryScan(request) {
+    const { importRepositoryScan } = await import('./import-repository-scan.mjs');
+    return importRepositoryScan(request);
+  },
   async approvedCatalog() {
     const { approvedCatalog } = await import('./approved-source.mjs');
     return approvedCatalog();
