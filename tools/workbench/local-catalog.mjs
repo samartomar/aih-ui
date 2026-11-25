@@ -3,6 +3,7 @@ import { join, resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadPublic } from './local-packages.mjs';
 import { readProfile } from './profile-reader.mjs';
+import { indexedAssets, itemRoot, readRevisions, selectionNote } from './scan-revisions.mjs';
 
 const PIN = '7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -23,12 +24,11 @@ function reportedRuleTitles(bytes) {
   return titles;
 }
 
-// Scan names files relative to the item. Catalog owns the pinned repository path.
-function findingSource(finding, selected, cache, texts) {
+// Scan names files relative to the item (under root). Catalog owns the pinned repository path.
+function findingSource(finding, selected, cache, texts, root) {
   const path = finding.path;
-  if (typeof path !== 'string' || !path || !finding.fileSha256) return {};
-  const matches = selected.item.files.filter(f => f.sha256 === finding.fileSha256 &&
-    (f.sourcePath === path || f.sourcePath?.endsWith('/' + path)));
+  if (typeof path !== 'string' || !path || !finding.fileSha256 || root === null) return {};
+  const matches = selected.item.files.filter(f => f.sha256 === finding.fileSha256 && f.sourcePath === root + path);
   if (matches.length !== 1) return {};
   const file = matches[0], source = selected.entry.sources.find(s => s.id === file.sourceId);
   if (!source || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(source.repository) ||
@@ -108,7 +108,7 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
         const server = content.items.find(member => member.id === mcpItem);
         entry.setup = { version, executable, launch, settings, mcpItem, platform, runtime:item.aiSetup.runtime, doNotRun:item.aiSetup.doNotRun, qualifications:qualifications.filter(record => record.subject.aiSetup === item.id).map(record => ({platform:record.subject.cell,status:record.result.status,reason:record.result.reason})), env: server?.env, enabledTools: server?.enabledTools, disabledTools: server?.disabledTools, startupSeconds: server?.startupSeconds, callSeconds: server?.callSeconds };
       }
-      if (indexed) for (const asset of [indexed.summary, indexed.bundle, ...indexed.sarif]) assetPath(asset);
+      if (indexed) for (const asset of indexedAssets(indexed)) assetPath(asset);
       byId.set(item.id, { item, content, entry });items.push(entry);
     }
   }
@@ -146,30 +146,70 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     if (hash(bytes) !== asset.sha256) throw invalid('Evidence digest changed');
     return bytes;
   }
-  async function evidence(id) {
+  // The item's pinned bytes from the host's source cache, or null when any file is unavailable.
+  function pinnedFiles(selected) {
+    const files = [];
+    for (const file of selected.item.files) {
+      const source = selected.entry.sources.find(s => s.id === file.sourceId);
+      if (!source || source.repository !== cache?.source?.repository || source.commit !== cache?.source?.commit) return null;
+      const encoded = cache.files?.find(f => f.path === file.sourcePath && f.sha256 === file.sha256)?.bytes?.data;
+      const bytes = typeof encoded === 'string' && Buffer.from(encoded, 'base64');
+      if (!bytes || hash(bytes) !== file.sha256) return null;
+      files.push({ sourcePath: file.sourcePath, sha256: file.sha256, executable: file.executable === true, bytes });
+    }
+    return files.length ? files : null;
+  }
+  const revisionCache = new Map();
+  async function evidence(id, revision) {
     const selected = byId.get(id);if (!selected) throw invalid('Unknown Catalog item');
-    if (evidenceCache.has(id)) return evidenceCache.get(id);
+    if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) throw invalid('Choose a recorded Scan revision');
     const { entry } = selected, record = index.records[entry.scanKey];
     if (!record) return { id, scanKey: entry.scanKey, status: 'missing', reason: 'No assessment indexed for this exact item identity', findings: [] };
-    const summaryUrl = assetPath(record.summary), bundleUrl = assetPath(record.bundle);
-    const bytes = await readAsset(summaryUrl), bundle = await readAsset(bundleUrl);
-    const summary = scan.readSummary(bytes);
-    if (summary.status !== 'ok' || summary.summary.scanKey !== entry.scanKey || summary.summary.revision !== record.revision) throw invalid('Scan summary does not match selected item and revision');
-    const verification = await scan.verifySummary(bytes, bundle);
+    const read = revisionCache.get(id) ?? await readRevisions({ scan, scanKey: entry.scanKey, entry: record, readAsset, assetPath, files: pinnedFiles(selected) });
+    if (read.revisions.every(value => value.verification.status === 'ok')) revisionCache.set(id, read);
+    const shownRevision = revision ?? read.defaultRevision ?? read.fallbackRevision;
+    const selection = revision !== undefined ? 'chosen' : read.defaultRevision !== null ? 'default' : 'fallback';
+    const revisions = read.revisions.map(value => ({ revision: value.revision, readable: value.readable, ...(value.reason && { reason: value.reason }),
+      scannedAt: value.scannedAt, mode: value.mode, producer: value.producer, verificationLabel: value.verificationLabel, trusted: value.trusted,
+      withdrawn: value.withdrawn, match: value.match.status, matchLabel: value.matchLabel, default: value.revision === read.defaultRevision }));
+    const note = selectionNote({ selection, revision: shownRevision, defaultRevision: read.defaultRevision, fallbackTier: read.fallbackTier });
+    const context = { revision: shownRevision, defaultRevision: read.defaultRevision, selection, fallbackTier: read.fallbackTier, selectionNote: note, revisions };
+    if (shownRevision === null) return { id, scanKey: entry.scanKey, status: 'unreadable', reason: note, ...context, findings: [] };
+    const cacheKey = id + '@' + shownRevision + '@' + selection;
+    if (evidenceCache.has(cacheKey)) return evidenceCache.get(cacheKey);
+    const shown = read.revisions.find(value => value.revision === shownRevision);
+    if (!shown) throw invalid('Choose a recorded Scan revision');
+    const { summary, verification, summaryUrl, bundleUrl } = shown;
+    if (!shown.readable) return { id, scanKey: entry.scanKey, status: 'unreadable', reason: shown.verificationLabel, ...context, verification, summaryUrl, bundleUrl, findings: [] };
+    const root = itemRoot(selected.item.files, summary.files);
     const findings = [], links = [], texts = new Map();
-    for (const asset of record.sarif) {
+    for (const asset of shown.record.sarif) {
       const url = assetPath(asset), sarif = await readAsset(url);
-      const result = await scan.readFindings(summary.summary, sarif, entry.scanKey);
-      if (result.status !== 'ok') return { id, scanKey: entry.scanKey, status: 'unreadable', reason: result.reason || result.status, verification, findings: [] };
+      const result = await scan.readFindings(summary, sarif, entry.scanKey);
+      if (result.status !== 'ok') return { id, scanKey: entry.scanKey, status: 'unreadable', reason: result.reason || result.status, ...context, verification, findings: [] };
       const titles = reportedRuleTitles(sarif);
       for (const finding of result.findings) {
         const ruleTitle = titles.get(JSON.stringify([finding.tool, finding.ruleId]));
-        findings.push({ ...finding, message: finding.text, evidenceUrl: url, ...(typeof ruleTitle === 'string' && {ruleTitle}), ...findingSource(finding, selected, cache, texts) });
+        findings.push({ ...finding, message: finding.text, evidenceUrl: url, ...(typeof ruleTitle === 'string' && {ruleTitle}), ...findingSource(finding, selected, cache, texts, root) });
       }
       links.push({ url, sha256: asset.sha256 });
     }
-    const result = { id, scanKey: entry.scanKey, status: verification.status === 'ok' ? 'ready' : 'unverified', summary: summary.summary, findings, verification, verificationLabel: verification.status === 'ok' ? verification.signer.trusted ? 'Signature verified · default trusted publisher' : 'Signature verified · publisher not trusted' : 'Signature not verified · ' + (verification.reason || verification.status), summaryUrl, bundleUrl, assets: links, verdict: summary.summary.label, riskScore: summary.summary.score, coverage: summary.summary.coverage, verifiedAt: new Date().toISOString(), scopeNote: 'Exact recorded item evidence; current source bytes, latest evidence and withdrawal freshness are not rechecked.' };
-    if (result.status === 'ready') evidenceCache.set(id, result);return result;
+    // Ready only for a trusted, unwithdrawn revision whose content was not contradicted.
+    const usable = shown.trusted && !['differs', 'refused'].includes(shown.match.status);
+    const result = { id, scanKey: entry.scanKey, status: usable ? 'ready' : 'unverified', summary, findings, verification, verificationLabel: shown.verificationLabel,
+      ...context, producer: shown.producer, match: shown.match.status, matchLabel: shown.matchLabel,
+      summaryUrl, bundleUrl, assets: links, verdict: summary.label, riskScore: summary.score, coverage: summary.coverage, verifiedAt: new Date().toISOString(),
+      scopeNote: 'Exact recorded item evidence. Withdrawals are those this index records; current source bytes are matched only when the host holds them, and newer evidence is not looked up.' };
+    if (result.status === 'ready') evidenceCache.set(cacheKey, result);return result;
+  }
+  // The evidence a review record binds: the exact revision read for it and its assets' digests.
+  async function reviewEvidence(itemId, revision) {
+    const record = await evidence(itemId, revision);
+    const reference = url => url && ({ url, sha256: assets.get(url).sha256 });
+    return { record, evidence: { itemId: record.id, scanKey: record.scanKey, catalogCommit: catalog.data.commit,
+      status: record.status, revision: record.summary?.revision ?? null, verdict: record.verdict ?? null,
+      verification: record.verificationLabel ?? null, reason: record.reason ?? null,
+      summary: reference(record.summaryUrl) ?? null, bundle: reference(record.bundleUrl) ?? null, findings: record.assets ?? [] } };
   }
   function planItems(ids, client, documents) {
     return reader.planInstall(ids, documents, [profiles.get(client)], {
@@ -260,5 +300,5 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     });
     return catalogPreview(ids, client);
   }
-  return { catalog, evidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools, prepareSelection };
+  return { catalog, evidence, reviewEvidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools, prepareSelection };
 }
