@@ -14,7 +14,7 @@ const actions = new Set(['draft', 'policy', 'policy-preview', 'record-review', '
 const fail = (message, code = 'INPUT_INVALID', status = 400) => Object.assign(Error(message), { code, status });
 const validRevision = value => value === undefined || (Number.isSafeInteger(value) && value > 0);
 function keys(value, allowed) { return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => allowed.includes(key)); }
-function validate(action, body) {
+export function validate(action, body) {
   if (action === 'record-review') {
     if (!keys(body, ['mode','digest','company','reviewer','team','decision','note','itemId','revision','concern']) || body.mode !== 'enterprise' || !validRevision(body.revision) ||
         !/^[a-f0-9]{64}$/.test(body.digest) || !['False alarm','Accepted risk','Accepted for this use','Follow-up needed','Declined'].includes(body.decision) ||
@@ -152,14 +152,10 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
           }
         }
         if (action === 'record-review') {
-          const record = input.itemId ? await fullCatalog.evidence(input.itemId, input.revision) : null;
+          const { record = null, evidence = null } = input.itemId ? await fullCatalog.reviewEvidence(input.itemId, input.revision) : {};
           if (['False alarm','Accepted risk'].includes(input.decision) && !record) throw fail('Attach the item or concern being reviewed.');
           if (input.concern && (!keys(input.concern,['tool','ruleId']) || !['tool','ruleId'].every(key => typeof input.concern[key] === 'string' && input.concern[key].length <= 300) || !record?.findings.some(finding => finding.tool === input.concern.tool && finding.ruleId === input.concern.ruleId))) throw fail('Choose a concern from this exact assessment.');
-          const reference = url => url && ({url, sha256:fullCatalog.assets.get(url).sha256});
-          input.evidence = record && {itemId:record.id, scanKey:record.scanKey, catalogCommit:fullCatalog.catalog.data.commit,
-            status:record.status, revision:record.summary?.revision ?? null, verdict:record.verdict ?? null,
-            verification:record.verificationLabel ?? null, reason:record.reason ?? null,
-            summary:reference(record.summaryUrl) ?? null, bundle:reference(record.bundleUrl) ?? null, findings:record.assets ?? []};
+          input.evidence = evidence;
         }
         if (action === 'catalog-prepare') {
           const { requestParts } = fullCatalog.catalogPreview(input.items,input.client);

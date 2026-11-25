@@ -42,9 +42,12 @@ function producer(summary) {
     const ai = tool.mode === 'ai' && isRecord(tool.ai) ? tool.ai : null;
     const fact = { tool: tool.tool, version: tool.version, mode: tool.mode,
       ...(ai?.model && { model: ai.model }),
+      ...(ai?.provider && { provider: ai.provider }),
+      ...(ai?.via && { via: ai.via }),
       ...(ai?.client && { client: { name: ai.client.name, version: ai.client.version } }),
       ...(ai?.effort && { effort: ai.effort }) };
     const parts = [tool.tool + ' ' + tool.version, tool.mode === 'ai' ? 'AI' : tool.mode === 'static' ? 'Static' : 'Mode not recorded'];
+    if (fact.provider) parts.push(fact.provider + (fact.via ? ' via ' + fact.via : ''));
     if (fact.model) parts.push(fact.model);
     if (fact.client) parts.push(fact.client.name + ' ' + fact.client.version);
     if (fact.effort) parts.push('effort ' + fact.effort);
@@ -52,13 +55,32 @@ function producer(summary) {
   });
 }
 
-// Scan names files relative to the item; Catalog names them by source path.
-function matchFiles(summary, files) {
-  return files.map(file => {
-    const paired = (summary.files || []).filter(entry => entry.sha256 === file.sha256 &&
+// Scan names files relative to the item folder; Catalog names them by source path. One item
+// root comes from the files that pair with exactly one summary entry (same sha256, path ending
+// in that entry's path); every file must sit under it. Otherwise there is no root (null).
+export function itemRoot(files, summaryFiles = []) {
+  let root = null;
+  for (const file of files) {
+    const paired = summaryFiles.filter(entry => entry.sha256 === file.sha256 && typeof entry.path === 'string' && entry.path &&
       (file.sourcePath === entry.path || file.sourcePath.endsWith('/' + entry.path)));
-    return { path: paired.length === 1 ? paired[0].path : file.sourcePath, mode: file.executable ? '100755' : '100644', bytes: file.bytes };
-  });
+    if (paired.length !== 1) continue;
+    const candidate = file.sourcePath.slice(0, file.sourcePath.length - paired[0].path.length);
+    if (root !== null && root !== candidate) return null;
+    root = candidate;
+  }
+  if (root === null || files.some(file => !file.sourcePath.startsWith(root) || file.sourcePath.length === root.length)) return null;
+  return root;
+}
+// Each file's path inside the item, in order, or null when no single root holds them all.
+export function itemPaths(files, summaryFiles) {
+  const root = itemRoot(files, summaryFiles);
+  return root === null ? null : files.map(file => file.sourcePath.slice(root.length));
+}
+
+// Without a common root the full source paths are offered, so matchScan reports a difference.
+function matchFiles(summary, files) {
+  const paths = itemPaths(files, summary.files) ?? files.map(file => file.sourcePath);
+  return files.map((file, index) => ({ path: paths[index], mode: file.executable ? '100755' : '100644', bytes: file.bytes }));
 }
 
 async function match(scan, verification, files) {
@@ -84,12 +106,20 @@ export async function readRevisions({ scan, scanKey, entry, readAsset, assetPath
     const summaryUrl = assetPath(record.summary), bundleUrl = assetPath(record.bundle);
     const bytes = await readAsset(summaryUrl), bundle = await readAsset(bundleUrl);
     const read = scan.readSummary(bytes);
-    if (read.status !== 'ok' || read.summary.scanKey !== scanKey || read.summary.revision !== record.revision) throw invalid('Scan summary does not match selected item and revision');
+    if (read.status !== 'ok') {
+      // Listed so earlier revisions stay available; never verified, matched, chosen or a fallback.
+      const reason = read.reason || read.status;
+      revisions.push({ revision: record.revision, record, readable: false, reason, summary: null, summaryUrl, bundleUrl,
+        verification: { status: read.status, reason }, verificationLabel: 'Summary could not be read · ' + reason, trusted: false, withdrawn: false,
+        match: { status: 'not-checked' }, matchLabel: matchLabel({ status: 'not-checked' }), eligible: false, mode: null, producer: [], scannedAt: null });
+      continue;
+    }
+    if (read.summary.scanKey !== scanKey || read.summary.revision !== record.revision) throw invalid('Scan summary names a different item or revision than its index record');
     const verification = options ? await scan.verifySummary(bytes, bundle, undefined, options) : await scan.verifySummary(bytes, bundle);
     const trusted = verification.status === 'ok' && verification.signer?.trusted === true && !verification.withdrawn;
     const matched = await match(scan, verification, files);
     const tools = producer(read.summary);
-    revisions.push({ revision: record.revision, record, summary: read.summary, summaryUrl, bundleUrl, verification,
+    revisions.push({ revision: record.revision, record, readable: true, summary: read.summary, summaryUrl, bundleUrl, verification,
       verificationLabel: verificationLabel(verification), trusted, withdrawn: verification.withdrawn === true,
       match: matched, matchLabel: matchLabel(matched), eligible: trusted && matched.status === 'matched',
       mode: tools.some(tool => tool.mode === 'ai') ? 'ai' : 'static', producer: tools, scannedAt: read.summary.scannedAt });
@@ -97,6 +127,18 @@ export async function readRevisions({ scan, scanKey, entry, readAsset, assetPath
   const newest = list => list.length ? list.at(-1).revision : null;
   const defaultRevision = newest(revisions.filter(revision => revision.eligible));
   // Shown when nothing qualifies as the default: trusted but not matched here, else the newest recorded.
-  const fallbackRevision = defaultRevision ?? newest(revisions.filter(revision => revision.trusted && revision.match.status === 'not-checked')) ?? newest(revisions);
-  return { revisions, defaultRevision, fallbackRevision };
+  const unchecked = newest(revisions.filter(revision => revision.trusted && revision.match.status === 'not-checked'));
+  const recorded = newest(revisions.filter(revision => revision.readable));
+  const fallbackTier = defaultRevision !== null ? null : unchecked !== null ? 'trusted-unchecked' : recorded !== null ? 'newest-recorded' : null;
+  const fallbackRevision = defaultRevision ?? unchecked ?? recorded;
+  return { revisions, defaultRevision, fallbackRevision, fallbackTier };
+}
+
+// What the screen says about the revision it shows. It never contradicts the verification label.
+export function selectionNote({ selection, revision, defaultRevision, fallbackTier }) {
+  if (selection === 'default') return 'Newest trusted revision whose content matches the pinned Catalog files.';
+  if (selection === 'chosen') return 'Chosen revision. ' + (defaultRevision ? 'Revision ' + defaultRevision + ' is the default.' : 'No revision qualifies as the default.');
+  if (fallbackTier === 'trusted-unchecked') return 'Newest trusted revision; its content could not be checked against the pinned Catalog files here.';
+  if (fallbackTier === 'newest-recorded') return 'No trusted revision matches the pinned Catalog files; showing the newest recorded revision ' + revision + ', which is not trusted here.';
+  return 'No revision of this item could be read.';
 }
