@@ -12,10 +12,11 @@ import { catalogInstallReason } from './catalog-install.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const actions = new Set(['draft', 'policy', 'policy-preview', 'record-review', 'prepare', 'remove', 'apply', 'check', 'check-claude', 'inspect', 'repair', 'report', 'catalog-evidence', 'catalog-plan', 'catalog-prepare', 'profile-preview']);
 const fail = (message, code = 'INPUT_INVALID', status = 400) => Object.assign(Error(message), { code, status });
+const validRevision = value => value === undefined || (Number.isSafeInteger(value) && value > 0);
 function keys(value, allowed) { return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => allowed.includes(key)); }
 function validate(action, body) {
   if (action === 'record-review') {
-    if (!keys(body, ['mode','digest','company','reviewer','team','decision','note','itemId','concern']) || body.mode !== 'enterprise' ||
+    if (!keys(body, ['mode','digest','company','reviewer','team','decision','note','itemId','revision','concern']) || body.mode !== 'enterprise' || !validRevision(body.revision) ||
         !/^[a-f0-9]{64}$/.test(body.digest) || !['False alarm','Accepted risk','Accepted for this use','Follow-up needed','Declined'].includes(body.decision) ||
         !['company','reviewer','note'].every(key => typeof body[key] === 'string' && body[key].trim()) ||
         !['company','reviewer','team','itemId','note'].every(key => typeof body[key] === 'string' && body[key].length <= (key === 'note' ? 2000 : 300))) throw fail('Supply company, reviewer, decision and rationale for the saved policy.');
@@ -25,7 +26,7 @@ function validate(action, body) {
     if (!keys(body, ['mode', 'profile', 'client']) || !['enterprise', 'vibe'].includes(body.mode) || typeof body.client !== 'string') throw fail('Invalid profile preview request');
     return;
   }
-  if (action === 'catalog-evidence') { if (!keys(body, ['mode', 'itemId']) || !['enterprise','vibe'].includes(body.mode) || typeof body.itemId !== 'string' || body.itemId.length > 300) throw fail('Invalid Catalog selection');return; }
+  if (action === 'catalog-evidence') { if (!keys(body, ['mode', 'itemId', 'revision']) || !['enterprise','vibe'].includes(body.mode) || typeof body.itemId !== 'string' || body.itemId.length > 300 || !validRevision(body.revision)) throw fail('Invalid Catalog selection');return; }
   if (action === 'catalog-plan' || action === 'catalog-prepare') { if (!keys(body, ['mode', 'items', 'client']) || !['enterprise','vibe'].includes(body.mode) || !Array.isArray(body.items) || body.items.some(id => typeof id !== 'string' || id.length > 300) || typeof body.client !== 'string') throw fail('Invalid plan preview selection');return; }
   if (!keys(body, ['mode', 'choices', 'text', 'id', 'obligation', 'allowCustom', 'frameworkRules','itemRules','kindRules','posture','allowedFrameworks','selection', 'managementId', 'context', 'reviewDigest', 'unit'])) throw fail('Unexpected input');
   if (!['enterprise', 'vibe'].includes(body.mode)) throw fail('Unknown mode');
@@ -151,7 +152,7 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
           }
         }
         if (action === 'record-review') {
-          const record = input.itemId ? await fullCatalog.evidence(input.itemId) : null;
+          const record = input.itemId ? await fullCatalog.evidence(input.itemId, input.revision) : null;
           if (['False alarm','Accepted risk'].includes(input.decision) && !record) throw fail('Attach the item or concern being reviewed.');
           if (input.concern && (!keys(input.concern,['tool','ruleId']) || !['tool','ruleId'].every(key => typeof input.concern[key] === 'string' && input.concern[key].length <= 300) || !record?.findings.some(finding => finding.tool === input.concern.tool && finding.ruleId === input.concern.ruleId))) throw fail('Choose a concern from this exact assessment.');
           const reference = url => url && ({url, sha256:fullCatalog.assets.get(url).sha256});
@@ -185,7 +186,7 @@ export async function createPrototypeServer({ consumer, workspace, port = 0, sou
           }
           return json(200, preview);
         }
-        if (action === 'catalog-evidence') return json(200, await fullCatalog.evidence(input.itemId));
+        if (action === 'catalog-evidence') return json(200, await fullCatalog.evidence(input.itemId, input.revision));
         const operation = mutation.then(() => workers.get(mode).request(action, input)); mutation = operation.catch(() => {});
         return json(200, await operation);
       }

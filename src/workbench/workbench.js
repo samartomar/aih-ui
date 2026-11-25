@@ -364,7 +364,7 @@ function reviewPanel(editable) {
     out+='<p>This local record links the reviewer and evidence to this policy revision. Names are self-declared. Adding evidence does not grant permission to install its subject.</p><div class="policy-controls">'+input('company','Company',300)+input('reviewer','Reviewed by',300)+input('team','Team or project (optional)',300)+
       '<label for="review-decision">Decision</label><select id="review-decision">'+['False alarm','Accepted risk','Accepted for this use','Follow-up needed','Declined'].map(d=>'<option '+(d===reviewDraft.decision?'selected':'')+'>'+d+'</option>').join('')+'</select>'+
       '<label for="review-note">Reason</label><textarea id="review-note" maxlength="2000">'+esc(reviewDraft.note)+'</textarea></div>'+
-      '<p>False alarm and Accepted risk record your judgment; Declined is advisory. To block installation, save a prohibited policy rule.</p>'+(reviewDraft.concern?'<p><b>Concern:</b> '+esc(reviewDraft.concern.tool)+' · '+esc(reviewDraft.concern.ruleId)+'</p>':'')+'<p><strong>Evidence</strong> · '+(attached?esc(attached.title)+' ('+esc(attached.id)+')':'No assessment attached')+'</p><div class="inline-actions">'+button('review-pick','Choose Scan evidence')+(attached?button('review-detach','Detach evidence'):'')+button('review-save','Record review',!attached&&['False alarm','Accepted risk'].includes(reviewDraft.decision),true)+'</div>';
+      '<p>False alarm and Accepted risk record your judgment; Declined is advisory. To block installation, save a prohibited policy rule.</p>'+(reviewDraft.concern?'<p><b>Concern:</b> '+esc(reviewDraft.concern.tool)+' · '+esc(reviewDraft.concern.ruleId)+'</p>':'')+'<p><strong>Evidence</strong> · '+(attached?esc(attached.title)+' ('+esc(attached.id)+')'+(reviewDraft.revision?' · Scan revision '+esc(reviewDraft.revision):''):'No assessment attached')+'</p><div class="inline-actions">'+button('review-pick','Choose Scan evidence')+(attached?button('review-detach','Detach evidence'):'')+button('review-save','Record review',!attached&&['False alarm','Accepted risk'].includes(reviewDraft.decision),true)+'</div>';
   } else if(editable)out+='<p>Save the policy above to record a company, reviewer, decision and supporting evidence for that revision.</p>';
   out+='<p>'+current.length+' review(s) for this policy revision.</p>';
   for (const entry of records.slice().sort(compareReviews).reverse()) {
@@ -652,10 +652,17 @@ function evidenceExplorer(r,context) {
 function originalAssessment(r) {
   return '<details class="original-assessment"><summary>Original assessment · producer label, score & raw assets</summary><dl><dt>Recorded producer label</dt><dd>'+esc(readable(r.verdict))+'</dd><dt>Recorded risk score</dt><dd>'+esc(readable(r.riskScore))+'</dd><dt>Exact item identity</dt><dd class="mono">'+esc(r.scanKey)+'</dd><dt>Coverage</dt><dd>'+esc(readable(r.coverage))+'</dd><dt>Verified during this local read</dt><dd>'+esc(r.verifiedAt)+'</dd><dt>Raw assets</dt><dd>'+link(r.summaryUrl,'Summary')+' · '+link(r.bundleUrl,'Signature bundle')+' '+(r.assets||[]).map(function(asset,index){return link(asset.url,'SARIF '+(index+1));}).join(' · ')+'</dd></dl><details><summary>Exact recorded summary</summary><pre>'+esc(JSON.stringify(r.summary,null,2))+'</pre></details><p>'+esc(r.scopeNote)+'</p><div class="inline-actions">'+button('catalog-load-evidence','Re-read evidence',false,false)+'</div></details>';
 }
+function scanRevisions(r) {
+  var list=r.revisions||[],shown=list.find(function(v){return v.revision===r.revision;});if(!shown)return '';
+  var note=r.selection==='default'?'Newest trusted revision whose content matches the pinned Catalog files.':r.selection==='chosen'?'Chosen revision. '+(r.defaultRevision?'Revision '+r.defaultRevision+' is the default.':'No revision is trusted and matched here.'):'No revision is trusted and matched here; showing revision '+r.revision+'.';
+  var option=function(v){return '<option value="'+v.revision+'" '+(v.revision===r.revision?'selected':'')+'>'+esc('Revision '+v.revision+(v.default?' (default)':'')+' · '+(v.mode==='ai'?'AI':'Static')+' · '+v.verificationLabel+' · '+v.matchLabel)+'</option>';};
+  return '<section class="scan-revisions" aria-label="Scan revisions"><h3>Scan revision '+esc(r.revision)+' of '+list.length+'</h3>'+(list.length>1?'<label for="scan-revision">Show revision</label><select id="scan-revision">'+list.map(option).join('')+'</select>':'')+'<p>'+esc(note)+' '+esc(shown.verificationLabel+' · '+shown.matchLabel)+(shown.scannedAt?' · scanned '+esc(shown.scannedAt):'')+'</p>'+producerList(shown.producer)+'</section>';
+}
+function producerList(producer) { return producer&&producer.length?'<ul class="scan-producer">'+producer.map(function(tool){return '<li>'+esc(tool.label)+'</li>';}).join('')+'</ul>':''; }
 function scanView() {
   var r=record();if(!r)return '<section class="panel"><h2>Scan coverage</h2><p>'+catalog.coverage.indexed+' of '+records.length+' Catalog items have an indexed assessment. '+catalog.coverage.missing+' have no assessment for their exact identity.</p><p>Choose a Catalog item to read its coverage and concerns.</p>'+go('catalog','Browse Catalog items')+'</section>';
   var ready=['ready','unverified'].includes(r.status);
-  return '<div class="source-header evidence-subject"><div><strong>'+esc(r.frameworkName)+' · '+esc(r.title)+'</strong><code>'+esc(r.id)+'</code></div>'+badge(ready?'RECORDED EVIDENCE':r.status==='missing'?'NO ASSESSMENT':r.status==='indexed'?'NOT LOADED':'UNREADABLE')+'</div>'+itemOrganizationReview(r)+'<div class="inline-actions">'+button('scan-return',state.scanReturn==='policy'?'Back to Policy':'Back to Catalog')+(!ready&&r.status!=='missing'?button('catalog-load-evidence','Load recorded assessment',false,false):'')+'</div>'+(ready?'<p class="evidence-verification">'+badge(r.verificationLabel,r.status==='ready'?'blue':'amber')+' · Coverage: '+esc(readable(r.coverage))+'</p>'+evidenceExplorer(r,'scan'):securityInspector(r,null))+(admin()?'<div class="inline-actions evidence-review-action">'+button('review-attach','Use this item in a policy review')+(finding()?.ruleId?button('review-concern','Review selected concern'):'')+'</div>':'')+'<details class="scan-description"><summary>About '+esc(r.title)+'</summary><p>'+esc(r.description)+'</p></details>';
+  return '<div class="source-header evidence-subject"><div><strong>'+esc(r.frameworkName)+' · '+esc(r.title)+'</strong><code>'+esc(r.id)+'</code></div>'+badge(ready?'RECORDED EVIDENCE':r.status==='missing'?'NO ASSESSMENT':r.status==='indexed'?'NOT LOADED':'UNREADABLE')+'</div>'+itemOrganizationReview(r)+'<div class="inline-actions">'+button('scan-return',state.scanReturn==='policy'?'Back to Policy':'Back to Catalog')+(!ready&&r.status!=='missing'?button('catalog-load-evidence','Load recorded assessment',false,false):'')+'</div>'+(ready?'<p class="evidence-verification">'+badge(r.verificationLabel,r.status==='ready'?'blue':'amber')+' · Coverage: '+esc(readable(r.coverage))+'</p>'+scanRevisions(r)+evidenceExplorer(r,'scan'):securityInspector(r,null))+(admin()?'<div class="inline-actions evidence-review-action">'+button('review-attach','Use this item in a policy review')+(finding()?.ruleId?button('review-concern','Review selected concern'):'')+'</div>':'')+'<details class="scan-description"><summary>About '+esc(r.title)+'</summary><p>'+esc(r.description)+'</p></details>';
 }
 function updateView() {
   var update=data.update;
@@ -669,7 +676,7 @@ function updateView() {
 function securityInspector(r,f) {
   if(!r)return '<section><h3>Recorded evidence</h3><p>Select any Catalog item. Evidence is loaded only for its exact scan identity.</p></section>';
   if(!['ready','unverified'].includes(r.status))return '<section><h3>'+esc(r.status==='missing'?'No assessment available':r.status==='indexed'?'Recorded assessment not loaded':'Recorded assessment unreadable')+'</h3><p>'+esc(r.status==='missing'?'No assessment indexed for this exact item identity':r.reason||r.verificationLabel||(r.status==='indexed'?'An index entry exists; select the item or load its evidence to verify the retained assets.':'Recorded evidence could not be read.'))+'</p><code>'+esc(r.scanKey)+'</code><p>Missing or unreadable evidence is not a safety verdict and does not block Catalog planning.</p></section>';
-  if(state.view==='scan')return '<section class="evidence-scope"><h3>Evidence scope</h3><code>'+esc(r.scanKey)+'</code><p>Coverage: '+esc(readable(r.coverage))+'</p><h3>Recorded detectors</h3>'+(r.summary?.tools||[]).map(function(tool){return '<p>'+esc(tool.tool)+' · '+esc(tool.mode==='ai'?'AI':tool.mode==='static'?'Static':tool.mode||'Mode not supplied')+(tool.ai?.model?' · '+esc(tool.ai.model):'')+'<small>'+esc(tool.result||'Result not supplied')+' · '+esc(tool.version||'Version not supplied')+'</small></p>';}).join('')+'<p>'+esc(r.scopeNote)+'</p></section>';
+  if(state.view==='scan')return '<section class="evidence-scope"><h3>Evidence scope</h3><code>'+esc(r.scanKey)+'</code><p>Coverage: '+esc(readable(r.coverage))+'</p><h3>Recorded detectors'+(r.revision?' · revision '+esc(r.revision):'')+'</h3>'+(r.summary?.tools||[]).map(function(tool,index){var fact=r.producer?.[index];return '<p>'+esc(fact?.label||tool.tool)+'<small>'+esc(tool.result||'Result not supplied')+'</small></p>';}).join('')+'<p>'+esc(r.scopeNote)+'</p></section>';
   return '<p class="evidence-verification">'+badge(r.verificationLabel,r.status==='ready'?'blue':'amber')+' · Coverage: '+esc(readable(r.coverage))+'</p>'+evidenceExplorer(r,'catalog')+'<div class="inline-actions">'+button('open-item-findings','Open in Scan')+'</div>';
 }
 function download(value,name) {
@@ -799,16 +806,16 @@ async function runAction(action) {
   if(action==='check'){var checked=await api('check',{},mode);applyRemote(checked);c.check={check:checked.check,admission:checked.admission,checks:checked.checks,coverage:checked.coverage,readAt:new Date().toISOString()};state.revealResult='check-heading';state.notice=state.mode==='enterprise'?'Core checked the installed files and the current organization policy.':'Core checked the installed files.';return;}
   if(action==='inspect'||action==='report'||action==='review-repair'){var actual=await api(action==='review-repair'?'repair':action,{},mode);applyRemote(actual);if(action==='report'&&!state.explicitClient){var detected=detectedClients();if(detected.size===1){state.catalogClient=[...detected][0];state.planPreview=null;}}state.revealResult=action==='report'?'report-heading':action==='inspect'?'inspection-heading':'repair-heading';state.notice=actual.repairApply||'Actual offline Core results collected under the displayed dedicated execution home.';return;}
   if(action==='scan-return'){state.view=state.scanReturn==='policy'?'policy':'catalog';return;}
-  if(action==='review-concern'&&admin()&&finding()){reviewDraft.itemId=record().id;reviewDraft.concern={tool:finding().tool,ruleId:finding().ruleId};state.view='policy';return;}
+  if(action==='review-concern'&&admin()&&finding()){reviewDraft.itemId=record().id;reviewDraft.revision=record().revision;reviewDraft.concern={tool:finding().tool,ruleId:finding().ruleId};state.view='policy';return;}
   if(action==='review-pick' && admin()) {
     state.reviewPicking=true;state.scanReturn='policy';state.view='catalog';state.notice='Select the item you reviewed, then open its findings to attach the evidence.';
     return;
   }
-  if(action==='review-attach' && admin() && record()) {reviewDraft.itemId=record().id;reviewDraft.concern=null;state.view='policy';state.notice='Selected evidence for the review record.';return;}
-  if(action==='review-detach') {reviewDraft.itemId='';reviewDraft.concern=null;return;}
+  if(action==='review-attach' && admin() && record()) {reviewDraft.itemId=record().id;reviewDraft.revision=record().revision;reviewDraft.concern=null;state.view='policy';state.notice='Selected evidence for the review record.';return;}
+  if(action==='review-detach') {reviewDraft.itemId='';reviewDraft.revision=undefined;reviewDraft.concern=null;return;}
   if(action==='review-save' && admin()) {
     const updated=await api('record-review',{...reviewDraft,digest:c.remote.policyDigest});
-    applyRemote(updated);reviewDraft.note='';reviewDraft.itemId='';state.notice='Review recorded against the saved policy revision.';return;
+    applyRemote(updated);reviewDraft.note='';reviewDraft.itemId='';reviewDraft.revision=undefined;state.notice='Review recorded against the saved policy revision.';return;
   }
   if(action.startsWith('export-review:')) {
     const entry=(c.remote.reviews||[]).find(row=>row.id===action.slice(14));if(entry)download(entry,'policy-review-'+entry.id+'.json');return;
@@ -818,10 +825,11 @@ async function runAction(action) {
   if(action==='return-superpowers-evidence'){var item=records.find(function(r){return r.framework==='superpowers'&&r.id.includes('brainstorming');})||records.find(function(r){return r.framework==='superpowers';});if(item){selectItem(item.id);state.view='scan';state.inspector='security';}return;}
   if(action==='save-intent'){download({type:'non-executable-update-intent',current:{version:framework.version,commit:framework.commit},candidate:{version:data.update.version,commit:data.update.commit},notice:'Recorded source comparison only; no executable candidate plan.'},'superpowers-update-intent.json');state.intentSaved=true;}
 }
-async function loadCatalogEvidence(item) {
+async function loadCatalogEvidence(item,revision) {
   if(!item||item.status==='missing')return;
+  if(revision===undefined&&item.selection==='chosen')revision=item.revision;
   var wasBusy=busy;busy=true;state.notice='Loading and verifying exact recorded item evidence…';render();
-  try{var evidence=await api('catalog-evidence',{itemId:item.id});if(evidence.id!==item.id||evidence.scanKey!==item.scanKey)throw Error('The returned evidence does not match the selected item identity.');Object.assign(item,evidence);state.notice='Recorded evidence read for '+item.title+'. Findings do not act as an installation gate.';}
+  try{var evidence=await api('catalog-evidence',revision===undefined?{itemId:item.id}:{itemId:item.id,revision:revision});if(evidence.id!==item.id||evidence.scanKey!==item.scanKey)throw Error('The returned evidence does not match the selected item identity.');Object.assign(item,evidence);state.notice='Recorded evidence read for '+item.title+'. Findings do not act as an installation gate.';}
   catch(error){item.status='unreadable';item.reason=error.message;item.findings=[];if(state.recordId===item.id){state.findingIndex=null;state.findingPage=0;state.severity='all';}throw error;}
   finally{busy=wasBusy;}
 }
@@ -930,6 +938,7 @@ document.addEventListener('change',function(event) {
     draftChanged();render();if(t.dataset.frameworkRule!=='extensions')$(toolFrameworkIds().has(t.dataset.frameworkRule)?'tool-policy':'framework-policy').open=true;$(t.id).focus();return;
   }
   if(t.id==='review-decision'){reviewDraft.decision=t.value;return;}
+  if(t.id==='scan-revision'&&record()){var chosen=Number(t.value),item=record();busy=true;render();loadCatalogEvidence(item,chosen).then(function(){state.notice='Scan revision '+chosen+' read for '+item.title+'.';},function(error){state.notice=error.message;}).finally(function(){busy=false;render();$('scan-revision')?.focus();});return;}
   if(t.id==='profile-import'){importProfile(t.files&&t.files[0]);return;}
   if(t.id==='profile-picker-framework'){profilePicker.framework=t.value;profilePicker.page=0;}
   else if(t.id==='profile-picker-kind'){profilePicker.kind=t.value;profilePicker.page=0;}
