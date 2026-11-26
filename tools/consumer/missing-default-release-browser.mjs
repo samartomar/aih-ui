@@ -51,7 +51,7 @@ export async function runMissingDefaultReleaseBrowser({ origin, baselineOrigin, 
     page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
-    await page.goto(at + '/');
+    await page.goto(at + '/classic.html');
     await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();

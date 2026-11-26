@@ -47,7 +47,7 @@ try {
         const page = await context.newPage();
         console.log(`State location: ${mode}/${theme}: opening page`);
         page.setDefaultTimeout(30_000); page.on('pageerror', e => errors.push(e.message));
-        await page.goto(origin, { waitUntil: 'domcontentloaded' });
+        await page.goto(origin + '/classic.html', { waitUntil: 'domcontentloaded' });
         await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
         if (await page.locator('#setup-dialog').isVisible()) {
           await page.getByRole('radio', { name: /Vibe coder/ }).check();
