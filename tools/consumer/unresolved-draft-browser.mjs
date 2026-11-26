@@ -130,9 +130,10 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     assert.equal(await reopened.locator('#policy-draft-save').isEnabled(), true);
     await reopened.screenshot({ path: join(output, '05-compile-allowed.png'), fullPage: true });
     // Replacing a choice is a safe draft edit too; changing the draft withdraws the compiled policy.
-    await reopened.getByRole('combobox', { name: `Replacement for ${MAINTAINED[1]}`, exact: true }).selectOption({ label: 'Grilling · Catalog' });
-    await reopened.locator(`#policy-draft-roots > div[data-item-id="${MAINTAINED[1]}"]`).scrollIntoViewIfNeeded();
-    await reopened.getByRole('button', { name: `Replace ${MAINTAINED[1]}`, exact: true }).click();
+    const replacementRow = reopened.locator(`#policy-draft-roots > div[data-item-id="${MAINTAINED[1]}"]`);
+    await replacementRow.getByRole('combobox', { name: `Replacement for ${MAINTAINED[1]}`, exact: true }).selectOption({ label: 'Grilling · Catalog' });
+    await replacementRow.scrollIntoViewIfNeeded();
+    await replacementRow.getByRole('button', { name: `Replace ${MAINTAINED[1]}`, exact: true }).click();
     await reopened.locator('#policy-accept:not([disabled])').waitFor(); await reopened.locator('#policy-accept').click();
     await reopened.locator('#policy-draft-status').filter({ hasText: 'Draft change accepted' }).waitFor();
     assert.deepEqual((await shownChoices(reopened)).map(([id]) => id).sort(), [PERSONAL, MAINTAINED[0], 'mattpocock.grilling'].sort());
