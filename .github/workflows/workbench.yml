@@ -8,33 +8,33 @@ permissions:
   contents: read
 jobs:
   ordinary-families:
-    # Playwright 1.56.1 has no Chromium for ubuntu-latest (Ubuntu 26.04); keep a supported image.
+    # Use the Ubuntu image exercised by the browser acceptance run.
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.19.0
+          node-version: 24.22.3
       - name: Check Workbench host response handling
         run: node --test tools/tests/approved-host.test.mjs
       # Independent producer checkpoints; consume their packed public interfaces.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: samartomar/aih-core
-          ref: 28b2759de6dd67e6d550f26c213924ca7f6fe4fb
+          ref: 94c7dcc320760a026269547bce8743bfd99d99f5
           path: .ci/core
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: samartomar/aih-catalog
-          ref: 052abc58f1a0e425d65a96f600e1afd59c263742
+          ref: 5f3848563b35b22424dbf4693882309e5f627489
           path: .ci/catalog
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: samartomar/aih-scan
-          ref: 943a104d15714a1e160218feb54ddad0f646e0d5
+          ref: f81a2c3d8cab439012fe00d275d59fdb548caa78
           path: .ci/scan
           persist-credentials: false
       - name: Build reviewed package checkpoints

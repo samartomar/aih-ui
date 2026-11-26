@@ -5,7 +5,10 @@ import { loadPublic } from './local-packages.mjs';
 import { readProfile } from './profile-reader.mjs';
 import { indexedAssets, itemRoot, readRevisions, selectionNote } from './scan-revisions.mjs';
 
-const PIN = '7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26';
+const recipeDigests = new Map([
+  ['7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26', '7bdb820e826980a8ad94c4d847f42db0cca2bc0e065f38317811adc83da5848a'],
+  ['a6495fc3d9a34dedc58f8e53e385a8661e209aed', '38cc0a0666a9ceabdfadf9439811e32357437df96917885470f3f3eb53519b96'],
+]);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const invalid = message => Object.assign(Error(message), { code: 'CATALOG_INPUT_INVALID', status: 400 });
 
@@ -64,13 +67,14 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
   const { api: scan } = await loadPublic(consumer, '@aihq/scan', './read');
   const snapshot = JSON.parse(await readFile(join(root, 'catalog.json'), 'utf8'));
   const index = JSON.parse(await readFile(join(root, 'scan', 'index.json'), 'utf8'));
-  if (snapshot.data?.commit !== PIN || snapshot.data?.repository !== 'https://github.com/samartomar/aih-catalog' || index.catalogCommit !== PIN) throw invalid('Catalog and Scan index must match the pinned data commit');
+  const pin = snapshot.data?.commit;
+  if (!recipeDigests.has(pin) || snapshot.data?.repository !== 'https://github.com/samartomar/aih-catalog' || index.catalogCommit !== pin) throw invalid('Catalog and Scan index must match the pinned data commit');
   // Pinned Catalog port-report/ai-setup.json and data/qualifications/*.json.
   const toolData = JSON.parse(await readFile(join(root, 'workbench', 'tool-setup-data.json'), 'utf8'));
-  if (toolData.source.commit !== PIN || toolData.source.repository !== snapshot.data.repository) throw invalid('Tool setup data does not match the Catalog pin');
+  if (toolData.source.commit !== pin || toolData.source.repository !== snapshot.data.repository) throw invalid('Tool setup data does not match the Catalog pin');
   const metadata = { name: toolData.recipe.id, version: '1.0.0', description: 'Catalog tool combination', author: 'Workbench', license: 'Apache-2.0', keywords: [] };
   const trio = reader.readRecipe(Buffer.from(JSON.stringify(metadata)), Buffer.from(JSON.stringify(toolData.recipe)));
-  if (trio.status !== 'ok' || trio.sha256 !== '7bdb820e826980a8ad94c4d847f42db0cca2bc0e065f38317811adc83da5848a') throw invalid('The Catalog tool recipe differs from the pinned combination');
+  if (trio.status !== 'ok' || trio.sha256 !== recipeDigests.get(pin)) throw invalid('The Catalog tool recipe differs from the pinned combination');
   const qualifications = Object.entries(toolData.qualifications).map(([digest, record]) => {
     const read = reader.readQualification(Buffer.from(JSON.stringify(record, null, 2) + '\n'));
     if (read.status !== 'ok' || read.sha256 !== digest) throw invalid('Invalid pinned tool qualification');
@@ -213,7 +217,7 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
   }
   function planItems(ids, client, documents) {
     return reader.planInstall(ids, documents, [profiles.get(client)], {
-      scope: 'project', data: { repository: snapshot.data.repository, commit: PIN },
+      scope: 'project', data: { repository: snapshot.data.repository, commit: pin },
     });
   }
   function plan(ids, client, configureTools = false) {
@@ -246,14 +250,14 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     const ids = new Set(selection);
     let result, identity, notice;
     if (selection) {
-      if (bundle.data.repository !== snapshot.data.repository || bundle.data.commit !== PIN) throw invalid('This profile uses a different Catalog revision from the loaded workspace.');
+      if (bundle.data.repository !== snapshot.data.repository || bundle.data.commit !== pin) throw invalid('This profile uses a different Catalog revision from the loaded workspace.');
       result = plan(selection, client).plan;
       identity = { profileDigest: hash(Buffer.from(JSON.stringify(bundle))) };
       notice = 'Catalog preview of your selected items. Your first task and accompanying Markdown travel in the profile download.';
     } else {
       result = reader.planRecipe(read.recipe, contents, [profile], choices, {
         scope: 'project', source: bundle.source,
-        data: { repository: snapshot.data.repository, commit: PIN },
+        data: { repository: snapshot.data.repository, commit: pin },
       });
       for (const member of read.recipe.members) if (member.preTicked) ids.add(member.item);
       for (const option of read.recipe.options ?? []) {

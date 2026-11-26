@@ -130,14 +130,16 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     assert.equal(await reopened.locator('#policy-draft-save').isEnabled(), true);
     await reopened.screenshot({ path: join(output, '05-compile-allowed.png'), fullPage: true });
     // Replacing a choice is a safe draft edit too; changing the draft withdraws the compiled policy.
-    await reopened.getByRole('combobox', { name: `Replacement for ${MAINTAINED[1]}`, exact: true }).selectOption({ label: 'Grilling · Catalog' });
-    await reopened.getByRole('button', { name: `Replace ${MAINTAINED[1]}`, exact: true }).click();
+    const replacementRow = reopened.locator(`#policy-draft-roots > div[data-item-id="${MAINTAINED[1]}"]`);
+    await replacementRow.getByRole('combobox', { name: `Replacement for ${MAINTAINED[1]}`, exact: true }).selectOption({ label: 'Grilling · Catalog' });
+    await replacementRow.scrollIntoViewIfNeeded();
+    await replacementRow.getByRole('button', { name: `Replace ${MAINTAINED[1]}`, exact: true }).click();
     await reopened.locator('#policy-accept:not([disabled])').waitFor(); await reopened.locator('#policy-accept').click();
     await reopened.locator('#policy-draft-status').filter({ hasText: 'Draft change accepted' }).waitFor();
     assert.deepEqual((await shownChoices(reopened)).map(([id]) => id).sort(), [PERSONAL, MAINTAINED[0], 'mattpocock.grilling'].sort());
     assert.match(await reopened.locator('#policy-summary').textContent(), /not executable/);
     assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
-    await writeFile(join(output, 'unresolved-draft-evidence.json'), JSON.stringify({ status: 'passed', entry: '/', chromium: browser.version(), choices: edited,
+    await writeFile(join(output, 'unresolved-draft-evidence.json'), JSON.stringify({ status: 'passed', entry: '/classic.html', chromium: browser.version(), choices: edited,
       compiledRoots: compiled.value.intent.roots.map(root => root.itemId), envelopeRevision: envelope.revision.sequence,
       scenarios: ['unresolved-markers', 'nothing-dropped', 'safe-edit', 'envelope-not-executable', 'exact-original-bytes', 'fresh-reopen-same-meaning', 'headless-agreement',
         'whole-compile-refused', 'resolved-compile-allowed', 'prepare-gated', 'replace-withdraws-compiled'], errors }, null, 2));

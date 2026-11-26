@@ -9,6 +9,9 @@ import { join } from 'node:path';
 import { createLocalCatalog } from '../workbench/local-catalog.mjs';
 
 const PIN = '7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26', REPO = 'https://github.com/samartomar/aih-catalog';
+const LEGACY_RECIPE = '7bdb820e826980a8ad94c4d847f42db0cca2bc0e065f38317811adc83da5848a';
+const CURRENT_PIN = 'a6495fc3d9a34dedc58f8e53e385a8661e209aed';
+const CURRENT_RECIPE = '38cc0a0666a9ceabdfadf9439811e32357437df96917885470f3f3eb53519b96';
 const SOURCE = { id: 'upstream', repository: 'https://github.com/example/skills', commit: 'c'.repeat(40) };
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const key = c => 'git-sha1:' + c.repeat(40);
@@ -21,8 +24,8 @@ async function writePackage(consumer, name, exports, files) {
   for (const [file, text] of Object.entries(files)) await writeFile(join(root, file), text);
 }
 
-const fakeReader = `
-export const readRecipe = () => ({ status: 'ok', sha256: '7bdb820e826980a8ad94c4d847f42db0cca2bc0e065f38317811adc83da5848a', recipe: { id: 'trio', members: [], aiSetup: {} } });
+const fakeReader = digest => `
+export const readRecipe = () => ({ status: 'ok', sha256: ${JSON.stringify(digest)}, recipe: { id: 'trio', members: [], aiSetup: {} } });
 export const readQualification = () => ({ status: 'refused' });
 export const readToolProfile = () => ({ status: 'ok', profile: { name: 'Claude Code', version: 1 } });
 export const readContent = bytes => ({ status: 'ok', content: JSON.parse(Buffer.from(bytes).toString('utf8')) });
@@ -56,11 +59,11 @@ const summary = (scanKey, revision, extra = {}) => ({ format: 'aih-scan-summary/
   tools: [{ tool: 'skillspector', version: '2.13.6', mode: 'static', result: 'pass', counts: {} }], sarif: [], ...extra });
 
 // items: [{ id, scanKey, revisions: [{ revision, trusted, summary? }], legacy? }]
-async function fixture(t, items, { cached = true } = {}) {
+async function fixture(t, items, { cached = true, pin = PIN, indexPin = pin, toolPin = pin, recipeDigest = LEGACY_RECIPE } = {}) {
   const consumer = await mkdtemp(join(tmpdir(), 'aih-ui-revisions-'));
   t.after(() => rm(consumer, { recursive: true, force: true }));
   await writePackage(consumer, '@aihq/catalog', { './reader': './reader.js', './contracts': './contracts.js' },
-    { 'reader.js': fakeReader, 'contracts.js': "export const toolProfiles = { 'claude-code': '{}' };" });
+    { 'reader.js': fakeReader(recipeDigest), 'contracts.js': "export const toolProfiles = { 'claude-code': '{}' };" });
   await writePackage(consumer, '@aihq/scan', { './read': './read.js' }, { 'read.js': fakeScan });
   const file = { sourceId: SOURCE.id, sourcePath: 'skills/demo/SKILL.md', sha256: sha(SKILL), executable: false, bytes: SKILL.length };
   const content = { framework: { id: 'demo', name: 'Demo' }, sources: [SOURCE],
@@ -68,8 +71,8 @@ async function fixture(t, items, { cached = true } = {}) {
   const text = JSON.stringify(content);
   await mkdir(join(consumer, 'public', 'scan'), { recursive: true });
   await mkdir(join(consumer, 'public', 'workbench'), { recursive: true });
-  await writeFile(join(consumer, 'public', 'catalog.json'), JSON.stringify({ data: { repository: REPO, commit: PIN, files: [{ path: 'data/demo/content.json', sha256: sha(text) }] }, documents: [text] }));
-  await writeFile(join(consumer, 'public', 'workbench', 'tool-setup-data.json'), JSON.stringify({ source: { repository: REPO, commit: PIN }, recipe: {}, qualifications: {} }));
+  await writeFile(join(consumer, 'public', 'catalog.json'), JSON.stringify({ data: { repository: REPO, commit: pin, files: [{ path: 'data/demo/content.json', sha256: sha(text) }] }, documents: [text] }));
+  await writeFile(join(consumer, 'public', 'workbench', 'tool-setup-data.json'), JSON.stringify({ source: { repository: REPO, commit: toolPin }, recipe: {}, qualifications: {} }));
   const records = {}, summaries = {};
   const put = async (name, value) => {
     const bytes = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
@@ -86,7 +89,7 @@ async function fixture(t, items, { cached = true } = {}) {
     }
     records[item.scanKey] = item.legacy ? listed[0] : { revisions: listed };
   }
-  await writeFile(join(consumer, 'public', 'scan', 'index.json'), JSON.stringify({ catalogCommit: PIN, release: 'fixture', records }));
+  await writeFile(join(consumer, 'public', 'scan', 'index.json'), JSON.stringify({ catalogCommit: indexPin, release: 'fixture', records }));
   let cache;
   if (cached) {
     cache = join(consumer, 'source-cache.json');
@@ -100,6 +103,18 @@ test('a legacy one-record index stays ready', async t => {
   const read = await local.evidence('demo.legacy');
   assert.equal(read.status, 'ready');
   assert.equal(read.summary.revision, 1);
+});
+
+test('only the matching Catalog, Scan index, and Tool Setup recipe are accepted', async t => {
+  const items = [{ id: 'demo.current', scanKey: key('a'), revisions: [{ revision: 1, trusted: true }] }];
+  const current = { pin: CURRENT_PIN, recipeDigest: CURRENT_RECIPE };
+  const { local } = await fixture(t, items, current);
+  assert.equal((await local.evidence('demo.current')).status, 'ready');
+  const inputError = message => error => error.status === 400 && error.code === 'CATALOG_INPUT_INVALID' && error.message.includes(message);
+  await assert.rejects(fixture(t, items, { ...current, indexPin: PIN }), inputError('Catalog and Scan index'));
+  await assert.rejects(fixture(t, items, { ...current, toolPin: PIN }), inputError('Tool setup data'));
+  await assert.rejects(fixture(t, items, { ...current, recipeDigest: LEGACY_RECIPE }), inputError('pinned combination'));
+  await assert.rejects(fixture(t, items, { recipeDigest: CURRENT_RECIPE }), inputError('pinned combination'));
 });
 
 test('a chosen revision is returned beside the newest trusted default', async t => {
