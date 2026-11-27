@@ -46,14 +46,17 @@ test('the member sees the verified publisher with the policy change, or why it i
   assert.equal(publisherFacts(undefined, branch).rows[0][1], 'GitHub could not be checked for the merged pull request. Try again.');
 });
 
-test('the administrator review names each companion MCP item a Tool Setup recipe permits', () => {
+test('the administrator review names each companion MCP item a Tool Setup recipe configures', () => {
   const recipe = { id: 'r/serena.ai-setup.serena', itemId: 'serena.ai-setup.serena', title: 'Serena', kind: 'ai-setup', framework: 'r', mcpItem: 'serena.mcp.serena' };
   const mcp = { id: 'r/serena.mcp.serena', itemId: 'serena.mcp.serena', title: 'Serena MCP', kind: 'mcp', framework: 'r' };
   const elsewhere = { ...mcp, id: 'o/serena.mcp.serena', framework: 'o' };
   const catalog = { items: [recipe, mcp, elsewhere] };
-  assert.deepEqual(toolSetupCompanions({ items: [recipe.id] }, catalog), [{ title: 'Serena MCP', recipeTitle: 'Serena' }]);
+  assert.deepEqual(toolSetupCompanions({ items: [recipe.id] }, catalog), [{ item: 'serena.mcp.serena', title: 'Serena MCP', recipeTitle: 'Serena' }]);
   assert.deepEqual(toolSetupCompanions({ items: [recipe.id, mcp.id] }, catalog), [], 'An explicitly chosen MCP item is not a companion.');
   assert.deepEqual(toolSetupCompanions({ items: [mcp.id] }, catalog), []);
-  assert.equal(companionNotice({ title: 'Serena MCP', recipeTitle: 'Serena' }),
-    'Also permits Serena MCP: configured by Serena, for the same CLI targets and project scope.');
+  assert.equal(companionNotice({ item: 'serena.mcp.serena', title: 'Serena MCP', recipeTitle: 'Serena' }),
+    'Serena includes its MCP server configuration (Serena MCP), which members cannot install on its own.');
+  // A shared title names the MCP item by its plain Catalog ID instead of repeating itself.
+  assert.equal(companionNotice({ item: 'serena.mcp.serena', title: 'Serena', recipeTitle: 'Serena' }),
+    'Serena includes its MCP server configuration (serena.mcp.serena), which members cannot install on its own.');
 });

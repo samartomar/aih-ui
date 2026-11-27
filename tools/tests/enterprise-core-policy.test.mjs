@@ -27,12 +27,17 @@ const harness = {
   listTools: () => ({ tools: [...clients, 'kiro'].map(id => ({ id })) }),
 };
 // Core's decision as the stub models it: each planned item needs an applicable permit and no prohibition.
+// In a plan that acquires a recipe, its companion MCP item is judged by the recipe's entries (C81).
 const contracts = {
   deriveChangeIdentity: ({ change }) => ({ status: 'ok', changeIdentity: 'change-' + change.id }),
   validateOrganizationPolicy: document => ({ status: 'ok', value: document }),
   previewAdmission({ organization, request }) {
     const client = request.target.client.id;
-    const admitted = request.plan.plan.every(step => {
+    const setups = request.plan.plan.map(step => inventory.find(item => item.id === step.item && item.framework === step.framework))
+      .filter(item => item?.kind === 'ai-setup');
+    const admitted = request.plan.plan.every(planned => {
+      const setup = setups.find(item => item.setup.mcpItem === planned.item && item.framework === planned.framework);
+      const step = setup ? { item: setup.id, framework: setup.framework } : planned;
       const applicable = organization.entries.filter(entry => entry.content?.item === step.item && entry.content.framework === step.framework &&
         (!entry.scopes || entry.scopes.includes('project')) && (!entry.clients || entry.clients.includes(client)));
       return !applicable.some(entry => entry.obligation === 'prohibited') && applicable.some(entry => entry.obligation === 'permitted');
@@ -63,18 +68,33 @@ function catalogSource({ hostPlansWithoutRecord = false } = {}) {
 const policyWith = source => createEnterprisePolicy({ consumer: '/unused', published, summary,
   catalog: async () => source, core: async () => ({ contracts, harness }) });
 
-test('a Tool Setup recipe permits its companion MCP item, which members are not offered separately', async () => {
+test('a Tool Setup recipe gets no companion entry: its MCP item is prohibited like any unselected item', async () => {
   const policy = policyWith(catalogSource());
   const { content, companions } = await policy.buildPolicy(choices);
+  assert.ok(content.entries.every(entry => !entry.id.startsWith('tool-setup-companion-')), 'No companion entry is written.');
   const companion = content.entries.filter(entry => entry.content?.item === 'serena.mcp.serena');
-  assert.deepEqual(companion.map(entry => entry.obligation), ['permitted', 'prohibited', 'prohibited']);
-  assert.match(companion[0].id, /^tool-setup-companion-/);
-  assert.deepEqual(companion[0].clients, clients);
+  assert.deepEqual(companion.map(entry => entry.obligation), ['prohibited']);
+  assert.equal(companion[0].clients, undefined);
   assert.deepEqual(companions, [{ item: 'serena.mcp.serena', framework: 'tools', title: 'Serena MCP',
     recipe: 'serena.ai-setup.serena', recipeTitle: 'Serena' }]);
+  // Core admits the companion inside the recipe's plan, so members still receive the recipe.
   const opened = await policy.openPolicy(content);
   assert.deepEqual(opened.items, [qualified('serena.ai-setup.serena')]);
   assert.deepEqual(opened.itemClients, { [qualified('serena.ai-setup.serena')]: clients });
+});
+
+test('an earlier policy\'s companion entry stays hidden while the same policy permits its recipe', async () => {
+  const policy = policyWith(catalogSource());
+  const { content } = await policy.buildPolicy(choices);
+  // Policies published before this change permitted the companion with its recipe's clients.
+  const legacy = { id: 'tool-setup-companion-entry-' + '1'.repeat(24), obligation: 'permitted', scopes: ['project'], clients,
+    content: { item: 'serena.mcp.serena', framework: 'tools' } };
+  const entries = [...content.entries.filter(entry => entry.content?.item !== legacy.content.item), legacy];
+  const opened = await policy.openPolicy({ ...content, entries });
+  assert.deepEqual(opened.items, [qualified('serena.ai-setup.serena')]);
+  // Without the recipe, the same entry is an ordinary permit.
+  const alone = entries.filter(entry => entry.content?.item !== 'serena.ai-setup.serena');
+  assert.deepEqual((await policy.openPolicy({ ...content, entries: alone })).items, [qualified('serena.mcp.serena')]);
 });
 
 test('a companion-prefixed entry without a recipe that configures it is still offered', async () => {
@@ -102,10 +122,10 @@ test('a recipe without a qualified platform is not offered, even when the host p
   assert.deepEqual((await policy.openPolicy(content)).items, []);
 });
 
-test('a recipe whose companion the policy prohibits is not offered', async () => {
+test('a recipe the policy prohibits is not offered, whatever its companion\'s entries', async () => {
   const policy = policyWith(catalogSource());
   const { content } = await policy.buildPolicy(choices);
-  const entries = content.entries.map(entry => entry.content?.item === 'serena.mcp.serena' && entry.obligation === 'permitted'
+  const entries = content.entries.map(entry => entry.content?.item === 'serena.ai-setup.serena' && entry.obligation === 'permitted'
     ? { ...entry, obligation: 'prohibited' } : entry);
   assert.deepEqual((await policy.openPolicy({ ...content, entries })).items, []);
 });
