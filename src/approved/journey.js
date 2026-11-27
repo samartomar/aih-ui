@@ -19,7 +19,7 @@ const personalSteps = [
 ];
 
 const adminSteps = [
-  ['org', 'Your organization', 'Identify the policy owner and choose the clients this policy covers.'],
+  ['org', 'Your organization', 'Name the organization and choose the clients this policy covers.'],
   ['versions', 'Choose version pins', 'Review the product and data versions this policy can refer to.'],
   ['catalog', 'Select from Catalog', 'Choose the Catalog items to include in policy review.'],
   ['byo', 'Bring your own content', 'Record organization-owned sources separately from Catalog.'],
@@ -40,7 +40,7 @@ export function stepsFor(role) {
 
 const draftFormat = 'aih-workbench-setup/1';
 export const emptyDraft = () => ({
-  format: draftFormat, allowPersonal:false, clients: [], items: [], organization: '', owner: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
+  format: draftFormat, allowPersonal:false, clients: [], items: [], organization: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
 });
 
 function cleanDraft(value) {
@@ -206,7 +206,6 @@ export function renderJourney(host, step, api) {
   } else if (step === 'org') {
     host.append(section('Organization details',
       field('Organization name', input(draft.organization, value => change('organization', value))),
-      field('Policy owner', input(draft.owner, value => change('owner', value))),
       section('CLI targets', clients(api))));
   } else if (step === 'versions') {
     renderVersionSets(host, api);

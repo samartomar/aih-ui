@@ -16,6 +16,7 @@ const changedSha = sha('9'), teamTree = sha('a');
 const file = { format: 'aih-workbench-profile/1', id: 'backend', name: 'Backend', description: '', items: [], clients: [] };
 const fileText = JSON.stringify(file) + '\n';
 const content = '{ "selections": ["one"] }\n';
+const companions = [{ item: 'serena.mcp.serena', framework: 'serena', title: 'Serena MCP', recipe: 'serena.ai-setup.serena', recipeTitle: 'Serena' }];
 const blobOf = text => createHash('sha1').update('blob ' + Buffer.byteLength(text) + '\0').update(text).digest('hex');
 const directory = (path, sha) => ({ path, sha, type: 'tree', mode: '040000' });
 const entry = (path, text, mode = '100644') => ({ path, sha: blobOf(text), type: 'blob', mode });
@@ -29,7 +30,8 @@ function fakeGithub() {
   const prefix = 'repos/' + config.repository;
   const makeRef = (branch, sha) => ({ ref: 'refs/heads/' + branch, object: { type: 'commit', sha } });
   const pull = () => ({ ...state.pull, head: { ...state.pull?.head, sha: state.head },
-    merged: state.merged, merge_commit_sha: state.merged ? mergedSha : null, state: state.merged ? 'closed' : 'open' });
+    merged: state.merged, merge_commit_sha: state.merged ? mergedSha : null, state: state.merged ? 'closed' : 'open',
+    merged_at: state.merged ? '2026-11-26T00:00:00Z' : null, merged_by: state.merged ? { login: 'merger-login' } : null });
   async function request(method, endpoint, data) {
     if (endpoint === 'user') return { id: state.id, login: state.login, token: 'must never reach browser' };
     assert.ok(endpoint.startsWith(prefix));
@@ -83,10 +85,19 @@ function fakeGithub() {
       return pull();
     }
     if (route === '/pulls') return state.pull ? [pull()] : [];
-    if (route === '/pulls/12') return pull();
+    if (route === '/pulls/12') return state.pullUnavailable ? absent() : pull();
+    if (route === '/commits/' + mergedSha + '/pulls') {
+      if (state.pullsUnavailable) return absent();
+      return state.pull ? [pull()] : [];
+    }
     if (route === '/commits') {
       const params = new URLSearchParams(query);
       assert.equal(params.get('sha'), mergedSha);
+      if (params.get('path') === config.policyPath) {
+        if (state.historyUnavailable) return absent();
+        if (state.noHistory) return [];
+        return [{ sha: mergedSha, author: state.policyAuthor === undefined ? { login: 'direct-pusher' } : state.policyAuthor }];
+      }
       assert.equal(params.get('path'), 'team/profiles/backend.json');
       return [{ sha: mergedSha, author: { login: state.login } }];
     }
@@ -98,7 +109,7 @@ function fakeGithub() {
 async function openHost(t, github, options = {}) {
   const transport = createEnterpriseGithub({ config, request: github.request, ...options });
   transport.setPolicyHandlers({
-    buildPolicy(selection) { assert.deepEqual(selection, ['one']); return { content }; },
+    buildPolicy(selection) { assert.deepEqual(selection, ['one']); return { content, companions }; },
     openPolicy(document) { assert.deepEqual(document, JSON.parse(content)); return ['one']; },
   });
   const server = createServer((request, response) =>
@@ -128,6 +139,7 @@ test('previews GitHub identity and base, refuses foreign requests, changed ident
   assert.deepEqual(review.identity, { login: 'admin-login', id: 101 });
   assert.deepEqual(review.target, { repository: config.repository, baseBranch: 'main', baseSha, path: config.policyPath });
   assert.equal(review.content, content);
+  assert.deepEqual(review.companions, companions, 'The admin sees each companion before publishing.');
   assert.equal(review.digest, createHash('sha256').update(review.content).digest('hex'));
   assert.equal((await call('propose', { confirmationId: review.confirmationId })).code, 400);
   const confirm = { confirmationId: review.confirmationId, confirmed: true };
@@ -172,6 +184,39 @@ test('recovers a lost PR response, checks the immutable head, and reads exact me
   github.state.fileMode = '120000';
   assert.equal((await call('policy')).code, 404);
   assert.equal((await call('status', { receipt })).body.receipt.status, 'changed');
+});
+
+test('names the account that merged the active policy commit, and tells not found apart from a failed lookup', async t => {
+  const github = fakeGithub(), { call, transport } = await openHost(t, github);
+  github.state.base = mergedSha;
+  const publisher = async () => (await call('policy')).body.publisher;
+  const direct = (await call('policy')).body;
+  assert.equal(direct.status, 'ready');
+  assert.deepEqual(direct.publisher, { status: 'not-found', commit: mergedSha, author: 'direct-pusher' });
+  github.state.policyAuthor = null;
+  assert.deepEqual(await publisher(), { status: 'not-found', commit: mergedSha });
+  github.state.pull = { number: 12, user: { id: 7 }, head: { ref: 'aih-workbench/policy-x', repo: { full_name: config.repository } },
+    base: { ref: 'main', repo: { full_name: config.repository } } };
+  assert.deepEqual(await publisher(), { status: 'not-found', commit: mergedSha }, 'An open pull request does not verify a publisher.');
+  github.state.merged = true;
+  assert.deepEqual(await publisher(), { status: 'verified', commit: mergedSha, login: 'merger-login', pull: 12 });
+  github.state.pull.base = { ref: 'other', repo: { full_name: config.repository } };
+  assert.equal((await publisher()).status, 'not-found', 'A pull request into another branch does not count.');
+  github.state.pull.base = { ref: 'main', repo: { full_name: config.repository } };
+  github.state.policyAuthor = { login: 'direct-pusher' };
+  github.state.pullUnavailable = true;
+  assert.deepEqual(await publisher(), { status: 'lookup-failed', commit: mergedSha, author: 'direct-pusher' });
+  github.state.pullUnavailable = false;
+  github.state.pullsUnavailable = true;
+  assert.deepEqual(await publisher(), { status: 'lookup-failed', commit: mergedSha, author: 'direct-pusher' });
+  github.state.pullsUnavailable = false;
+  github.state.historyUnavailable = true;
+  assert.deepEqual(await publisher(), { status: 'lookup-failed', commit: null });
+  github.state.historyUnavailable = false;
+  github.state.noHistory = true;
+  assert.deepEqual(await publisher(), { status: 'no-commit', commit: null });
+  assert.equal(Object.hasOwn(await transport.readPolicy(), 'publisher'), false, 'Execution reads make no publisher lookup.');
+  assert.deepEqual(github.writes, []);
 });
 
 test('limits team proposals to portable Profiles and reads their merged, attributed files', async t => {

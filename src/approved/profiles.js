@@ -15,6 +15,22 @@ function library(key = libraryKey) {
   });
 }
 
+// Name a Profile choice by its Catalog title, or by its plain Catalog ID when the title is unknown.
+export function profileChoiceLabel({ id, value }, data, label = 'title') {
+  if (value?.[label]) return value[label];
+  const list = label === 'name' ? data?.clients : data?.items;
+  const known = list?.find(entry => entry.id === id) ??
+    (label === 'title' ? list?.filter(entry => entry.itemId === id).at(0) : undefined);
+  if (known?.[label]) return known[label];
+  return label === 'title' ? /^[0-9a-f]{64}\/(.+)$/.exec(id)?.[1] ?? id : id;
+}
+
+// Only an account the host reports as able to open a pull request can propose a team Profile.
+export function canProposeTeamProfile(role, kind, config) {
+  return role !== 'individual' && (kind === 'saved' || kind === 'team') &&
+    config?.status === 'ready' && config.canPropose === true;
+}
+
 function put(profile, key = libraryKey) {
   return store(key, [...library(key).filter(old => old.id !== profile.id), profile]);
 }
@@ -36,6 +52,8 @@ export function renderProfiles(host, api) {
   let publicProfile;
   let selected = null;
   const teamReceipt = node('div', null, 'ix-stack');
+  const proposeAccess = api.role === 'individual' ? Promise.resolve(null)
+    : teamProfileRequest('/config', api.signal).catch(() => null);
 
   function showShelf() {
     const collections = [
@@ -75,8 +93,8 @@ export function renderProfiles(host, api) {
   function preview(profile, kind = 'saved', source) {
     const enterprise = api.role === 'enterprise';
     const choices = resolveProfileChoices(profile, api.fullData ?? api.data, enterprise ? api.data : undefined);
-    const availability = ({ value, id }, label) => (value?.[label] ?? id) +
-      (enterprise ? value ? ' · eligible under current policy' : ' · unavailable under current policy' : value ? '' : ' · unavailable');
+    const availability = (choice, label) => profileChoiceLabel(choice, api.fullData ?? api.data, label) +
+      (enterprise ? choice.value ? ' · eligible under current policy' : ' · unavailable under current policy' : choice.value ? '' : ' · unavailable');
     const list = node('ul');
     for (const choice of choices.items) list.append(node('li', availability(choice, 'title')));
     const heading = node('h3', profile.name);
@@ -112,9 +130,10 @@ export function renderProfiles(host, api) {
       edit(kind === 'saved' ? profile : { ...profile, id: crypto.randomUUID() })),
     action('Export Profile', () => share('export')), action('Prepare public Profile', () => share('public')));
     if (kind === 'saved') buttons.append(action('Share in this browser', () => share('local')));
-    if (api.role !== 'individual' && (kind === 'saved' || kind === 'team')) {
-      buttons.append(action('Propose team Profile', () => share('team')));
-    }
+    const propose = action('Propose team Profile', () => share('team'));
+    propose.hidden = true;
+    buttons.append(propose);
+    proposeAccess.then(config => { propose.hidden = !canProposeTeamProfile(api.role, kind, config); });
     const use = action('Use this Profile', () => {
       const current = resolveProfileChoices(profile, api.fullData ?? api.data, enterprise ? api.currentData() : undefined);
       if (enterprise && (!api.published || !current.eligible)) {

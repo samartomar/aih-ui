@@ -13,7 +13,6 @@ function matchingVersion(current, expected) {
 export function checkSelection(selection, data, managed = false) {
   const issues = [];
   if (!selection.organization) issues.push('Enter an organization name.');
-  if (!managed && !selection.owner) issues.push('Enter a policy owner.');
   if (!selection.clients.length) issues.push(managed
     ? 'The published policy offers no eligible settings for the prepared CLI targets.'
     : 'Choose at least one CLI target.');
@@ -34,24 +33,39 @@ export function checkSelection(selection, data, managed = false) {
   return issues;
 }
 
-function normalize(value) {
+export function normalizeSelection(value) {
   if (!value || value.format !== format || typeof value.organization !== 'string' ||
-    typeof value.owner !== 'string' || typeof value.source !== 'string' ||
+    (value.owner !== undefined && typeof value.owner !== 'string') || typeof value.source !== 'string' ||
     !Array.isArray(value.clients) || !Array.isArray(value.items) ||
     [...value.clients, ...value.items].some(id => typeof id !== 'string') ||
     !value.versions || typeof value.versions !== 'object' || Array.isArray(value.versions) ||
     Object.entries(value.versions).some(([name, version]) => !['core', 'catalog', 'scan'].includes(name) || typeof version !== 'string')) {
     throw new Error('Open a team selection exported by this Workbench.');
   }
+  // Earlier selections carried a typed owner. It still opens but is no longer kept.
   return {
-    format, organization: value.organization.trim(), owner: value.owner.trim(),
+    format, organization: value.organization.trim(),
     allowPersonal:value.allowPersonal === true, source: value.source.trim(), files: checkedFiles(value.files), clients: [...new Set(value.clients)],
     items: [...new Set(value.items)], versions: { ...value.versions },
   };
 }
 
+// Core has no recipe-scoped admission, so permitting a Tool Setup recipe also permits the
+// MCP item its plan configures. Name each one for the administrator before publication.
+export function companionNotice({ title, recipeTitle }) {
+  return 'Also permits ' + title + ': configured by ' + recipeTitle + ', for the same CLI targets and project scope.';
+}
+
+export function toolSetupCompanions(selection, data) {
+  const chosen = new Set(selection.items);
+  return data.items.filter(recipe => chosen.has(recipe.id) && recipe.kind === 'ai-setup' && recipe.mcpItem).flatMap(recipe => {
+    const mcp = data.items.find(item => item.framework === recipe.framework && item.itemId === recipe.mcpItem);
+    return mcp && !chosen.has(mcp.id) ? [{ title: mcp.title ?? mcp.itemId, recipeTitle: recipe.title ?? recipe.itemId }] : [];
+  });
+}
+
 export function selectionFor(draft) {
-  return normalize({ format, organization: draft.organization, owner: draft.owner, source: draft.source, files: draft.files, allowPersonal:draft.allowPersonal === true,
+  return normalizeSelection({ format, organization: draft.organization, source: draft.source, files: draft.files, allowPersonal:draft.allowPersonal === true,
     clients: draft.clients, items: draft.items, versions: draft.versions });
 }
 
@@ -60,7 +74,7 @@ export function publishedSelection() {
   const published = shared ?? readStored(importedKey, null);
   if (!published || typeof published.revision !== 'string') return null;
   try {
-    return { revision: published.revision, selection: normalize(published.selection), origin: shared ? 'shared locally' : 'imported' };
+    return { revision: published.revision, selection: normalizeSelection(published.selection), origin: shared ? 'shared locally' : 'imported' };
   } catch {
     return null;
   }
@@ -95,12 +109,12 @@ export function reviewTeamSelection(host, api, publish = false) {
   output.setAttribute('role', 'status');
   const info = facts([
     ['Organization', current.organization || 'Required'],
-    ['Policy owner (draft)', current.owner || 'Required'],
     ['CLI targets', String(current.clients.length)],
     ['Exact Catalog items', String(current.items.length)],
     ['Supporting files shared with members', current.files.map(file=>file.name).join(', ') || 'None'],
     ['Current local revision', latest?.revision],
   ]);
+  const companions = toolSetupCompanions(current, api.data).map(companion => hint(companionNotice(companion)));
   const list = node('ul');
   for (const issue of problems) list.append(node('li', issue));
   const buttons = node('div', null, 'ix-buttons');
@@ -137,7 +151,28 @@ export function reviewTeamSelection(host, api, publish = false) {
   host.append(section(publish ? managed ? 'Organization selection draft' : 'Local organization selection' : 'Review the organization selection', info,
     hint(managed ? 'The administrator-configured GitHub branch supplies the member policy. Core evaluates and applies changes.' :
       'This selection controls what the Enterprise User can choose in this browser. Core evaluates and applies changes.'),
-    list, buttons, ...(!publish || !managed ? [output] : [])));
+    ...companions, list, buttons, ...(!publish || !managed ? [output] : [])));
+}
+
+// Only a merged pull request identifies who published the policy. A commit author is not verified.
+// The branch commit read is shown only when later commits did not change the policy file.
+export function publisherFacts(publisher, branchCommit) {
+  const commit = typeof publisher?.commit === 'string' ? publisher.commit : null;
+  const change = commit && 'policy change ' + commit.slice(0, 7);
+  const author = typeof publisher?.author === 'string' ? [['Commit author (unverified)', publisher.author]] : [];
+  let rows;
+  if (publisher?.status === 'verified' && typeof publisher.login === 'string' && Number.isSafeInteger(publisher.pull) && commit) {
+    rows = [['Published by', publisher.login + ' · merged pull request #' + publisher.pull + ' · ' + change]];
+  } else if (publisher?.status === 'not-found' && commit) {
+    rows = [['Published by', 'Not verified: no merged pull request was found for ' + change], ...author];
+  } else if (publisher?.status === 'no-commit') {
+    rows = [['Published by', 'Not verified: no commit on this branch changed the policy file.']];
+  } else {
+    rows = [['Published by', 'GitHub could not be checked for the merged pull request. Try again.'], ...author];
+  }
+  const later = Boolean(commit && branchCommit && branchCommit !== commit);
+  return { rows, branch: branchCommit && (!commit || later) ? ['Branch commit read', branchCommit] : null,
+    note: later ? 'Later commits on this branch did not change the policy file.' : null };
 }
 
 export function showEnterprisePolicy(host, api) {
@@ -145,18 +180,20 @@ export function showEnterprisePolicy(host, api) {
   const output = section('Organization selection');
   if (managedMode()) managedNotice(host, api);
   if (published) {
+    const publisher = published.source ? publisherFacts(published.publisher, published.revision) : null;
     output.append(facts([
       [published.source ? 'Organization policy ID' : 'Organization', published.selection.organization],
-      ['Policy owner', published.source ? 'Unrecorded in the published policy' : published.selection.owner],
+      ...(publisher?.rows ?? []),
       ['GitHub repository owner', published.source?.repository?.split('/')[0]],
       ['Published Catalog repository', published.selection.catalogPin?.repository],
       ['Published Catalog data commit', published.selection.catalogPin?.commit],
       ['Package version pins', published.source ? 'Unrecorded in the published policy' : null],
-      [published.source ? 'Published commit' : 'Local revision', published.revision],
+      publisher ? publisher.branch ?? ['Branch commit read', null] : ['Local revision', published.revision],
       ['Source', published.origin],
       ['CLI targets', String(published.selection.clients.length)],
       ['Catalog items', String(published.selection.items.length)],
     ]));
+    if (publisher?.note) output.append(hint(publisher.note));
     for (const file of published.selection.files) {
       const details = node('details');
       details.append(node('summary', file.name), node('pre', file.text),
@@ -173,7 +210,7 @@ export function showEnterprisePolicy(host, api) {
   }
   output.append(fileField('Open team selection', '.json,application/json', async file => {
     if (file.size > 1024 * 1024) throw new Error('Choose a team selection smaller than 1 MB.');
-    const selection = normalize(JSON.parse(await file.text()));
+    const selection = normalizeSelection(JSON.parse(await file.text()));
     const issues = checkSelection(selection, fullData);
     if (issues.length) throw new Error(issues.join(' '));
     if (!store(importedKey, { revision: crypto.randomUUID(), selection })) throw new Error('The browser could not open this selection.');

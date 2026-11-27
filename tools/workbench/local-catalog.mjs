@@ -5,6 +5,7 @@ import { loadPublic } from './local-packages.mjs';
 import { readProfile } from './profile-reader.mjs';
 import { indexedAssets, itemRoot, readRevisions, selectionNote } from './scan-revisions.mjs';
 
+const platformCell = /^(windows|darwin|linux)-(x64|arm64)$/;
 const recipeDigests = new Map([
   ['7c525bd7d8b6e8a0c756d79f7e29f44ec38bff26', '7bdb820e826980a8ad94c4d847f42db0cca2bc0e065f38317811adc83da5848a'],
   ['a6495fc3d9a34dedc58f8e53e385a8661e209aed', '38cc0a0666a9ceabdfadf9439811e32357437df96917885470f3f3eb53519b96'],
@@ -220,10 +221,10 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
       scope: 'project', data: { repository: snapshot.data.repository, commit: pin },
     });
   }
-  function plan(ids, client, configureTools = false) {
+  function plan(ids, client, configureTools = false, cell = platform) {
     if (!profiles.has(client) || !Array.isArray(ids) || !ids.length || ids.some(id => !byId.has(id)) || new Set(ids).size !== ids.length) throw invalid('Choose known items and one published client');
     if (configureTools && ids.every(id => byId.get(id).entry.setup)) {
-      return { client, selection: ids, execution: 'preview-only', notice: 'Configuration preview for the selected tools on ' + platform + '.', plan: planTools(ids, client) };
+      return { client, selection: ids, execution: 'preview-only', notice: 'Configuration preview for the selected tools on ' + cell + '.', plan: planTools(ids, client, cell) };
     }
     return { client, selection: ids, execution: 'preview-only', notice: 'Preview the planned project changes. Review installation verifies the required source files and asks Core for an approval review.', plan: planItems(ids, client, contents) };
   }
@@ -239,8 +240,8 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     }
     return reader.planInstall(ids, contents, selected, options);
   }
-  function catalogPreview(ids, client) {
-    const response = plan(ids, client, true);
+  function catalogPreview(ids, client, cell = platform) {
+    const response = plan(ids, client, true, cell);
     return {response, requestParts:admissionParts(response.plan, new Set(ids), client)};
   }
   function profilePreview(bundle, client) {
@@ -281,7 +282,7 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     return { response, requestParts };
   }
   function previewTools(items, client, cell) {
-    if (!profiles.has(client) || !/^(windows|darwin|linux)-(x64|arm64)$/.test(cell)) {
+    if (!profiles.has(client) || !platformCell.test(cell)) {
       throw invalid('Choose a published CLI target and platform.');
     }
     const ids = items.map(({ id, itemId }) => {
@@ -295,14 +296,16 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     return { ...planTools(ids, client, cell), source: toolData.source,
       recipe: ids.length === toolCombination.members.length && toolCombination.members.every(id => ids.includes(id)) ? toolCombination.id : null };
   }
-  function prepareSelection(items, client) {
+  // A Tool Setup recipe can be planned for another qualified platform cell than this host's.
+  function prepareSelection(items, client, cell) {
+    if (cell !== undefined && !platformCell.test(cell)) throw invalid('Choose a published platform.');
     const ids = items.map(({ id, itemId }) => {
       const entry = byId.get(itemId)?.entry;
       const framework = frameworks.find(value => value.id === entry?.framework);
       if (!entry || id !== `${framework?.sha256}/${itemId}`) throw invalid('The exact item is unavailable from the prepared Catalog source.');
       return itemId;
     });
-    return catalogPreview(ids, client);
+    return catalogPreview(ids, client, cell ?? platform);
   }
   return { catalog, evidence, reviewEvidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools, prepareSelection };
 }

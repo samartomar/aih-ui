@@ -168,7 +168,7 @@ function deposit(c,x,y,lit) {
 
 // The labels on the passing records describe the current work without asserting its outcome.
 const adminRecords = [
-  ['Organization','Policy owner','CLI targets','Policy draft'],
+  ['Organization','Policy publisher','CLI targets','Policy draft'],
   ['Core package','Catalog data','Scan package','Evidence release'],
   ['Catalog items','Catalog entry','Framework selection','Source evidence'],
   ['Repository','Source revision','Local checkout','Review notes'],

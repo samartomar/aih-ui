@@ -10,6 +10,17 @@ export function selectedToolRecipes(items, exclusions = []) {
   return items.filter(item => item.kind === 'ai-setup' && !exclusions.includes(item.id));
 }
 
+// Under an organization policy, a recipe is offered only for the CLI targets that policy permits it for.
+export function recipePermitted(data, item, client) {
+  return !data.itemClients || data.itemClients[item.id]?.includes(client) === true;
+}
+
+// Without chosen targets, a recipe is offered only when no organization policy restricts it.
+export function offeredToolRecipes(data, clients) {
+  const targets = clients.length ? clients : [null];
+  return selectedToolRecipes(data.items).filter(item => targets.some(client => recipePermitted(data, item, client)));
+}
+
 async function previewSetup(ids, client, platform) {
   const query = new URLSearchParams({ client, platform });
   for (const id of ids) query.append('item', id);
@@ -50,11 +61,13 @@ export function renderToolSetup(host, api) {
       checked => change('instructionUpdates', checked ? 'allowed' : 'review')));
   host.append(guides);
 
-  const recipes = selectedToolRecipes(data.items);
+  const recipes = offeredToolRecipes(data, draft.clients);
   if (!recipes.length) {
-    const reason = api.role === 'enterprise' ? 'The current organization selection offers no Tool Setup recipes.'
+    const forTargets = api.role === 'enterprise' && selectedToolRecipes(data.items).length;
+    const reason = forTargets ? 'The organization policy permits no Tool Setup recipes for the selected CLI targets.'
+      : api.role === 'enterprise' ? 'The current organization selection offers no Tool Setup recipes.'
       : 'No Tool Setup recipes are available from the connected Catalog.';
-    host.append(section('Tool Setup', hint(reason)));
+    host.append(section('Tool Setup', hint(reason), ...(forTargets ? [link('Choose CLI targets', api.route('clients'))] : [])));
     return;
   }
   const choices = node('fieldset', null, 'ix-tool-list');
@@ -105,9 +118,11 @@ export function renderToolSetup(host, api) {
     status.textContent = 'Reading the pinned Catalog preview…';
     output.replaceChildren();
     try {
-      const results = await Promise.all(targets().map(async client => ({
-        client, result: await previewSetup(ids, client.id, targetPlatform),
-      })));
+      const results = await Promise.all(targets().map(async client => {
+        const permitted = selected().filter(item => recipePermitted(data, item, client.id)).map(item => item.id);
+        return { client, result: permitted.length ? await previewSetup(permitted, client.id, targetPlatform)
+          : { status: 'unavailable', reason: 'The organization policy does not permit the selected tools for this CLI.' } };
+      }));
       if (revision !== began || !host.isConnected) return;
       status.textContent = 'Review the proposed project changes for each CLI.';
       for (const { client, result } of results) output.append(planResult(client, result));

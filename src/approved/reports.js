@@ -130,6 +130,17 @@ export function renderReports(host, api) {
     });
 }
 
+// Core leaves the PATH entry number as `?` when it cannot identify it. Show readable text only:
+// a string, without that placeholder, and nothing for an object or an empty value.
+const readable = value => typeof value === 'string' && /[\p{L}\p{N}]/u.test(value) ? value.trim()
+  .replace(/\bPATH entry \?(?= for\b)/g, 'an unnumbered PATH entry').replace(/\bPATH entry \?/g, 'PATH') : null;
+
+export function diagnosticLines(answer) {
+  const lines = [...(answer?.observations ?? []).map(row => readable(row?.detail)),
+    ...(answer?.diagnostics ?? []).map(row => readable(row?.message) ?? readable(row?.reason))];
+  return [...new Set(lines.filter(Boolean))];
+}
+
 export function renderDiagnostics(host, api) {
   const result = node('div', null, 'ix-stack');
   result.setAttribute('aria-live', 'polite');
@@ -156,8 +167,7 @@ export function renderDiagnostics(host, api) {
       tools.append(node('li', [label, status, selection, version].filter(Boolean).join(' · ')));
     }
     if (tools.childElementCount) result.append(node('h4', 'Tool states'), tools);
-    const observations = [...(answer.observations ?? []).map(row => row.detail),
-      ...(answer.diagnostics ?? []).map(row => row.message ?? row.reason)].filter(Boolean);
+    const observations = diagnosticLines(answer);
     if (observations.length) {
       const list = node('ul');
       for (const observation of observations) list.append(node('li', observation));

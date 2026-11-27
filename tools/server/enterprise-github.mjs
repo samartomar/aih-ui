@@ -215,6 +215,35 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
     }
     return { status: 'ready', content, text: content, selection, source: sourceOf(commitSha, path, blobSha) };
   }
+  // The publisher is the account that merged a pull request containing the active
+  // policy commit into the configured base. A commit author alone is unverified.
+  // `not-found` means GitHub answered and no merged pull request contains the commit;
+  // `lookup-failed` means GitHub could not be asked; `no-commit` means no commit changed the file.
+  async function publisherOf(headSha, path) {
+    let history;
+    try { history = await repo('/commits?' + new URLSearchParams({ sha: headSha, path, per_page: '1' })); }
+    catch { return { status: 'lookup-failed', commit: null }; }
+    const commit = Array.isArray(history) && SHA.test(history[0]?.sha) ? history[0] : null;
+    if (!commit) return { status: 'no-commit', commit: null };
+    const author = typeof commit.author?.login === 'string' && commit.author.login ? { author: commit.author.login } : {};
+    const result = status => ({ status, commit: commit.sha, ...author });
+    let pulls;
+    try { pulls = await repo('/commits/' + commit.sha + '/pulls'); } catch { return result('lookup-failed'); }
+    const merged = (Array.isArray(pulls) ? pulls : []).filter(pull => Number.isSafeInteger(pull?.number) && pull.number > 0 &&
+      typeof pull.merged_at === 'string' && pull.base?.ref === destination.baseBranch &&
+      pull.base.repo?.full_name?.toLowerCase() === destination.repository.toLowerCase()).slice(0, 5);
+    let failed = false;
+    for (const candidate of merged) {
+      let pull;
+      try { pull = await repo('/pulls/' + candidate.number); } catch { failed = true; continue; }
+      const login = pull?.merged_by?.login;
+      if (pull?.number === candidate.number && pull.merged === true && pull.base?.ref === destination.baseBranch &&
+          typeof login === 'string' && login) {
+        return { status: 'verified', commit: commit.sha, login, pull: pull.number };
+      }
+    }
+    return result(failed ? 'lookup-failed' : 'not-found');
+  }
   async function readProfiles() {
     if (problem) return { status: hasDestination ? 'unavailable' : 'unconfigured', profiles: [], error: problem };
     const [commitSha] = await Promise.all([ref(destination.baseBranch), repositoryMetadata()]);
@@ -245,13 +274,14 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
     if (input?.kind === 'policy') {
       checked(exactKeys(input, ['kind', 'selection']), 'Supply only the organization policy selection.', 400);
       checked(policy, 'This Workbench host cannot build an organization policy.', 503);
-      let content;
-      try { ({ content } = await policy.buildPolicy(input.selection)); } catch (error) {
+      let content, companions;
+      try { ({ content, companions } = await policy.buildPolicy(input.selection)); } catch (error) {
         if (error?.enterpriseStatus === 422) throw error;
         checked(false, 'The policy could not be built from the supplied selection and installed package pins.', 422);
       }
       checked(content && (typeof content === 'string' || typeof content === 'object'), 'Workbench could not build a valid policy.', 422);
-      return { kind: 'policy', content: typeof content === 'string' ? content : JSON.stringify(content, null, 2) + '\n', path: destination.policyPath };
+      return { kind: 'policy', content: typeof content === 'string' ? content : JSON.stringify(content, null, 2) + '\n', path: destination.policyPath,
+        companions: Array.isArray(companions) ? companions : [] };
     }
     checked(input?.kind === 'profile' && exactKeys(input, ['kind', 'content']) && typeof input.content === 'string',
       'Supply a policy selection or portable Profile.', 400);
@@ -279,7 +309,8 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
     const confirmationId = randomUUID();
     const headBranch = 'aih-workbench/' + proposal.kind + '-' + confirmationId;
     const target = { repository: destination.repository, baseBranch: destination.baseBranch, baseSha, path: proposal.path };
-    const result = { status: 'ready', confirmationId, identity: account.identity, target, digest: digestOf(bytes), content: proposal.content };
+    const result = { status: 'ready', confirmationId, identity: account.identity, target, digest: digestOf(bytes), content: proposal.content,
+      ...(proposal.kind === 'policy' ? { companions: proposal.companions } : {}) };
     const createdAt = Date.now();
     pending.set(confirmationId, { confirmationId, kind: proposal.kind, ...target, identity: result.identity,
       digest: result.digest, baseTree, headBranch, blobSha, bytes, createdAt, expires: createdAt + CONFIRM_FOR });
@@ -476,7 +507,7 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
   const routes = new Map([
     ['config', ['GET', readConfig]], ['policy', ['GET', async () => {
       const { status, content, selection, source } = await readPolicy();
-      return { status, content, selection, source };
+      return { status, content, selection, source, publisher: await publisherOf(source.commitSha, source.path) };
     }]], ['profiles', ['GET', readProfiles]],
     ['preview', ['POST', preview]], ['propose', ['POST', propose]], ['status', ['POST', statusOf]],
     ['inspect', ['POST', inspectPolicy]], ['recovery', ['GET', readRecoveries]],
