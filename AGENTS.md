@@ -1,8 +1,8 @@
 # Working in this repo
 
-**Hard rule for maintainer sessions.** This checkout belongs to a larger maintainer workspace. Start every session at that workspace's root and target this repository from there; never start one here. Create no worktree of this repository alone: a needed worktree is created under the workspace root, with the session still at that root.
+**Hard rule for maintainer sessions.** In the maintainer workspace, this checkout sits under the workspace root. Start every maintainer session at that root and target this repository from there; never start one in this repository or in a worktree of it. Create no worktree by default. When the workspace's rules call for one, create it under the workspace root and keep the session at that root; never create one elsewhere.
 
-The workspace owns workflow, issue routing, triage, delivery and release process. This file holds only this repository's own rules; outside contributors without the workspace follow the public documentation and these rules.
+The workspace owns the engineering workflow, issue routing, triage, delivery coordination and navigation-helper setup; this repository's own documents own its checks and release requirements. This file holds only this repository's own rules; outside contributors without the workspace follow the public documentation and these rules.
 
 1. This repo owns the Policy Workbench screens only. `README.md` lists what it must never contain.
 2. `src/` owns the implemented screens and their presentation. Keep Tailwind as a pinned local build and put Workbench design tokens and CSS in `src/styles/`. Define palette values only in the root themes in `tokens.css`; use semantic roles in components. Keep the per-kind, metadata and action accents theme-aware, and preserve status color meanings.
