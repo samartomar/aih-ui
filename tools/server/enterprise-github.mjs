@@ -215,6 +215,35 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
     }
     return { status: 'ready', content, text: content, selection, source: sourceOf(commitSha, path, blobSha) };
   }
+  // The publisher is the account that merged a pull request containing the active
+  // policy commit into the configured base. A commit author alone is unverified.
+  async function publisherOf(headSha, path) {
+    let commit;
+    try {
+      const history = await repo('/commits?' + new URLSearchParams({ sha: headSha, path, per_page: '1' }));
+      if (SHA.test(history?.[0]?.sha)) commit = history[0];
+    } catch { /* Reported as unavailable below. */ }
+    if (!commit) return { status: 'unavailable', commit: null };
+    const author = typeof commit.author?.login === 'string' && commit.author.login ? commit.author.login : null;
+    const unverified = author ? { status: 'unverified', commit: commit.sha, author } : { status: 'unavailable', commit: commit.sha };
+    let pulls;
+    try { pulls = await repo('/commits/' + commit.sha + '/pulls'); } catch { return unverified; }
+    const merged = (Array.isArray(pulls) ? pulls : []).filter(pull => Number.isSafeInteger(pull?.number) && pull.number > 0 &&
+      typeof pull.merged_at === 'string' && pull.base?.ref === destination.baseBranch &&
+      pull.base.repo?.full_name?.toLowerCase() === destination.repository.toLowerCase()).slice(0, 5);
+    for (const candidate of merged) {
+      try {
+        const pull = await repo('/pulls/' + candidate.number);
+        const login = pull?.merged_by?.login;
+        if (pull?.number === candidate.number && pull.merged === true && pull.base?.ref === destination.baseBranch &&
+          typeof login === 'string' && login) {
+          return { status: 'verified', commit: commit.sha, login, pull: pull.number,
+            url: 'https://github.com/' + destination.repository + '/pull/' + pull.number };
+        }
+      } catch { /* Try the next merged pull request. */ }
+    }
+    return unverified;
+  }
   async function readProfiles() {
     if (problem) return { status: hasDestination ? 'unavailable' : 'unconfigured', profiles: [], error: problem };
     const [commitSha] = await Promise.all([ref(destination.baseBranch), repositoryMetadata()]);
@@ -476,7 +505,7 @@ export function createEnterpriseGithub({ config = hostConfig(process.env), reque
   const routes = new Map([
     ['config', ['GET', readConfig]], ['policy', ['GET', async () => {
       const { status, content, selection, source } = await readPolicy();
-      return { status, content, selection, source };
+      return { status, content, selection, source, publisher: await publisherOf(source.commitSha, source.path) };
     }]], ['profiles', ['GET', readProfiles]],
     ['preview', ['POST', preview]], ['propose', ['POST', propose]], ['status', ['POST', statusOf]],
     ['inspect', ['POST', inspectPolicy]], ['recovery', ['GET', readRecoveries]],

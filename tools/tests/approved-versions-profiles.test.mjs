@@ -130,3 +130,28 @@ test('a managed Profile with mixed CLI eligibility keeps an incompatible item un
   assert.equal(resolveProfileChoices(profile, data, allowed).eligible, false);
   assert.equal(resolveProfileChoices({...profile, clients:['claude-code']}, data, allowed).eligible, true);
 });
+
+test('a Profile item outside policy shows its title or plain Catalog ID, never a qualified ID', async () => {
+  const { profileChoiceLabel } = await import('../../src/approved/profiles.js');
+  const release = 'a'.repeat(64);
+  const data = { items: [{ id: release + '/superpowers.skill.brainstorming', itemId: 'superpowers.skill.brainstorming', title: 'Brainstorming' }],
+    clients: [{ id: 'codex', name: 'Codex CLI' }] };
+  assert.equal(profileChoiceLabel({ id: release + '/superpowers.skill.brainstorming' }, data), 'Brainstorming');
+  assert.equal(profileChoiceLabel({ id: 'superpowers.skill.brainstorming' }, data), 'Brainstorming');
+  assert.equal(profileChoiceLabel({ id: release + '/superpowers.skill.writing-plans' }, data), 'superpowers.skill.writing-plans');
+  assert.equal(profileChoiceLabel({ id: 'x', value: { title: 'Chosen' } }, data), 'Chosen');
+  assert.equal(profileChoiceLabel({ id: 'codex' }, data, 'name'), 'Codex CLI');
+  assert.equal(profileChoiceLabel({ id: 'kiro' }, data, 'name'), 'kiro');
+});
+
+test('Propose team Profile follows the host GitHub canPropose answer', async () => {
+  const { canProposeTeamProfile } = await import('../../src/approved/profiles.js');
+  const ready = { status: 'ready', canPropose: true };
+  assert.equal(canProposeTeamProfile('enterprise', 'team', ready), true);
+  assert.equal(canProposeTeamProfile('admin', 'saved', ready), true);
+  assert.equal(canProposeTeamProfile('enterprise', 'team', { status: 'ready', canPropose: false }), false);
+  assert.equal(canProposeTeamProfile('enterprise', 'saved', { status: 'unavailable', canPropose: true }), false);
+  assert.equal(canProposeTeamProfile('enterprise', 'team', null), false);
+  assert.equal(canProposeTeamProfile('enterprise', 'host', ready), false);
+  assert.equal(canProposeTeamProfile('individual', 'saved', ready), false);
+});

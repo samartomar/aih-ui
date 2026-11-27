@@ -26,7 +26,7 @@ Review the organization draft, then open **Publish for your team**. Preview the 
 
 Set `AIH_CONSUMER_PROJECT` on the member host to the intended project. The member reads the trusted policy with their own GitHub access, selects a permitted CLI and reviews the Core changes before applying them. Catalog files, organization files and permitted personal files have separate native reviews. An updated policy invalidates a previous review. **Check installed policy impact** reads existing project receipts.
 
-The merged Core document carries the organization ID and Catalog source pin. Package versions and the accountable owner remain in the admin draft. A member can verify the repository, branch, path and commit independently. Run `node tools/check-enterprise-handoff.mjs <prepared-consumer>` with a compatible Node runtime to exercise Core admission and application in a disposable project.
+The merged Core document carries the organization ID and Catalog source pin. Package versions remain in the admin draft. The member's policy view shows **Published by**: the account that merged the pull request containing the active policy commit, or says that no merged pull request was found. A member can verify the repository, branch, path and commit independently. Run `node tools/check-enterprise-handoff.mjs <prepared-consumer>` with a compatible Node runtime to exercise Core admission and application in a disposable project.
 
 Set `AIH_WORKBENCH_PROFILES` to an absolute JSON file containing portable Profiles to offer them through the host's read-only Profile library. Individuals can also share Profiles in this browser or export them.
 

@@ -29,7 +29,8 @@ function fakeGithub() {
   const prefix = 'repos/' + config.repository;
   const makeRef = (branch, sha) => ({ ref: 'refs/heads/' + branch, object: { type: 'commit', sha } });
   const pull = () => ({ ...state.pull, head: { ...state.pull?.head, sha: state.head },
-    merged: state.merged, merge_commit_sha: state.merged ? mergedSha : null, state: state.merged ? 'closed' : 'open' });
+    merged: state.merged, merge_commit_sha: state.merged ? mergedSha : null, state: state.merged ? 'closed' : 'open',
+    merged_at: state.merged ? '2026-11-26T00:00:00Z' : null, merged_by: state.merged ? { login: 'merger-login' } : null });
   async function request(method, endpoint, data) {
     if (endpoint === 'user') return { id: state.id, login: state.login, token: 'must never reach browser' };
     assert.ok(endpoint.startsWith(prefix));
@@ -84,9 +85,16 @@ function fakeGithub() {
     }
     if (route === '/pulls') return state.pull ? [pull()] : [];
     if (route === '/pulls/12') return pull();
+    if (route === '/commits/' + mergedSha + '/pulls') {
+      if (state.pullsUnavailable) return absent();
+      return state.pull ? [pull()] : [];
+    }
     if (route === '/commits') {
       const params = new URLSearchParams(query);
       assert.equal(params.get('sha'), mergedSha);
+      if (params.get('path') === config.policyPath) {
+        return [{ sha: mergedSha, author: state.policyAuthor === undefined ? { login: 'direct-pusher' } : state.policyAuthor }];
+      }
       assert.equal(params.get('path'), 'team/profiles/backend.json');
       return [{ sha: mergedSha, author: { login: state.login } }];
     }
@@ -172,6 +180,31 @@ test('recovers a lost PR response, checks the immutable head, and reads exact me
   github.state.fileMode = '120000';
   assert.equal((await call('policy')).code, 404);
   assert.equal((await call('status', { receipt })).body.receipt.status, 'changed');
+});
+
+test('names the account that merged the active policy commit, otherwise says no merged pull request was found', async t => {
+  const github = fakeGithub(), { call, transport } = await openHost(t, github);
+  github.state.base = mergedSha;
+  const direct = (await call('policy')).body;
+  assert.equal(direct.status, 'ready');
+  assert.deepEqual(direct.publisher, { status: 'unverified', commit: mergedSha, author: 'direct-pusher' });
+  github.state.policyAuthor = null;
+  assert.deepEqual((await call('policy')).body.publisher, { status: 'unavailable', commit: mergedSha });
+  github.state.pull = { number: 12, user: { id: 7 }, head: { ref: 'aih-workbench/policy-x', repo: { full_name: config.repository } },
+    base: { ref: 'main', repo: { full_name: config.repository } } };
+  assert.deepEqual((await call('policy')).body.publisher, { status: 'unavailable', commit: mergedSha },
+    'An open pull request does not verify a publisher.');
+  github.state.merged = true;
+  assert.deepEqual((await call('policy')).body.publisher, { status: 'verified', commit: mergedSha, login: 'merger-login', pull: 12,
+    url: 'https://github.com/' + config.repository + '/pull/12' });
+  github.state.pull.base = { ref: 'other', repo: { full_name: config.repository } };
+  assert.equal((await call('policy')).body.publisher.status, 'unavailable', 'A pull request into another branch does not count.');
+  github.state.pull.base = { ref: 'main', repo: { full_name: config.repository } };
+  github.state.policyAuthor = { login: 'direct-pusher' };
+  github.state.pullsUnavailable = true;
+  assert.deepEqual((await call('policy')).body.publisher, { status: 'unverified', commit: mergedSha, author: 'direct-pusher' });
+  assert.equal(Object.hasOwn(await transport.readPolicy(), 'publisher'), false, 'Execution reads make no publisher lookup.');
+  assert.deepEqual(github.writes, []);
 });
 
 test('limits team proposals to portable Profiles and reads their merged, attributed files', async t => {

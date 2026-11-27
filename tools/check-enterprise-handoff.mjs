@@ -53,7 +53,7 @@ async function checkEnterpriseHandoff(dir) {
   const policy = createEnterprisePolicy({consumer,summary,catalog,published:{items,frameworks}});
   const teamFiles = [{name:'team-notes.md',text:'# Review repository support notes\n',allowUpdates:false},
     {name:'team-faq.md',text:'# Team FAQ\n',allowUpdates:true}];
-  const choices = {format:'aih-workbench-team-selection/1',organization:'Fixture Org',owner:'Fixture Steward',source:'',
+  const choices = {format:'aih-workbench-team-selection/1',organization:'Fixture Org',source:'',
     versions,clients:['claude-code'],items:[allowed.id],files:teamFiles,allowPersonal:true};
   const revision = {repository:'controlled/organization',baseBranch:'main',path:'policy.json',commitSha:'a'.repeat(40),blobSha:'b'.repeat(40)};
   // The managed source here is a controlled read seam. GitHub transport has its own tests.
@@ -76,6 +76,22 @@ async function checkEnterpriseHandoff(dir) {
   assert.ok(distinct.content.entries.some(entry => entry.content?.item === skill &&
     entry.content.framework === another.id && entry.obligation === 'prohibited'));
   const output = await policy.buildPolicy(choices);
+  // Earlier saved selections carried a typed owner; it still builds the same Core document.
+  assert.deepEqual((await policy.buildPolicy({...choices, owner:'Fixture Steward'})).content, output.content);
+  assert.equal(Object.hasOwn(output.selection, 'owner'), false);
+  // A permitted Tool Setup recipe reaches members with its companion MCP item admitted
+  // but not listed. An unselected recipe stays unavailable.
+  const recipes = items.filter(item => item.kind === 'ai-setup');
+  const [permittedRecipe, ...otherRecipes] = recipes;
+  assert.ok(permittedRecipe?.setup?.mcpItem && otherRecipes.length);
+  const recipePolicy = await policy.buildPolicy({...choices, clients:['claude-code','codex'], items:[permittedRecipe.id], files:[], allowPersonal:false});
+  const recipeSelection = await policy.openPolicy(recipePolicy.content);
+  assert.deepEqual(recipeSelection.items, [permittedRecipe.id], JSON.stringify(recipeSelection));
+  assert.deepEqual(recipeSelection.itemClients[permittedRecipe.id], ['claude-code','codex']);
+  for (const other of otherRecipes) assert.ok(!recipeSelection.items.includes(other.id));
+  const withoutCompanion = {...recipePolicy.content, entries:recipePolicy.content.entries.map(entry =>
+    entry.content?.item === permittedRecipe.setup.mcpItem && entry.obligation === 'permitted' ? {...entry, obligation:'prohibited'} : entry)};
+  assert.deepEqual((await policy.openPolicy(withoutCompanion)).items, []);
   assert.equal(output.content.schema,'urn:aihq:core:organization:0.1.0');
   await install(output.content);
   assert.deepEqual(managed.selection.items,[allowed.id]);
@@ -150,7 +166,7 @@ async function checkEnterpriseHandoff(dir) {
     const changed = await native.impact();
     assert.equal(changed.entries.find(e=>e.itemId===skill)?.status,'denied',JSON.stringify(changed));
     assert.ok((await readdir(join(project,'.claude','skills'))).includes('brainstorming'));
-    console.log(JSON.stringify({catalog:skill,fileState:applied.fileState,mixed:mixed.code,wrongCLI:wrongCLI.code,
+    console.log(JSON.stringify({catalog:skill,recipe:permittedRecipe.itemId,fileState:applied.fileState,mixed:mixed.code,wrongCLI:wrongCLI.code,
     deniedPersonal:deniedPersonal.code,stale:stale.diagnostics[0],personal:personalApply.status,orgFiles:teamFiles.map(f=>f.name),
       installedImpact:changed.entries.find(e=>e.itemId===skill)?.status}));
   } finally {

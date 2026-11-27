@@ -13,7 +13,6 @@ function matchingVersion(current, expected) {
 export function checkSelection(selection, data, managed = false) {
   const issues = [];
   if (!selection.organization) issues.push('Enter an organization name.');
-  if (!managed && !selection.owner) issues.push('Enter a policy owner.');
   if (!selection.clients.length) issues.push(managed
     ? 'The published policy offers no eligible settings for the prepared CLI targets.'
     : 'Choose at least one CLI target.');
@@ -34,24 +33,25 @@ export function checkSelection(selection, data, managed = false) {
   return issues;
 }
 
-function normalize(value) {
+export function normalizeSelection(value) {
   if (!value || value.format !== format || typeof value.organization !== 'string' ||
-    typeof value.owner !== 'string' || typeof value.source !== 'string' ||
+    (value.owner !== undefined && typeof value.owner !== 'string') || typeof value.source !== 'string' ||
     !Array.isArray(value.clients) || !Array.isArray(value.items) ||
     [...value.clients, ...value.items].some(id => typeof id !== 'string') ||
     !value.versions || typeof value.versions !== 'object' || Array.isArray(value.versions) ||
     Object.entries(value.versions).some(([name, version]) => !['core', 'catalog', 'scan'].includes(name) || typeof version !== 'string')) {
     throw new Error('Open a team selection exported by this Workbench.');
   }
+  // Earlier selections carried a typed owner. It still opens but is no longer kept.
   return {
-    format, organization: value.organization.trim(), owner: value.owner.trim(),
+    format, organization: value.organization.trim(),
     allowPersonal:value.allowPersonal === true, source: value.source.trim(), files: checkedFiles(value.files), clients: [...new Set(value.clients)],
     items: [...new Set(value.items)], versions: { ...value.versions },
   };
 }
 
 export function selectionFor(draft) {
-  return normalize({ format, organization: draft.organization, owner: draft.owner, source: draft.source, files: draft.files, allowPersonal:draft.allowPersonal === true,
+  return normalizeSelection({ format, organization: draft.organization, source: draft.source, files: draft.files, allowPersonal:draft.allowPersonal === true,
     clients: draft.clients, items: draft.items, versions: draft.versions });
 }
 
@@ -60,7 +60,7 @@ export function publishedSelection() {
   const published = shared ?? readStored(importedKey, null);
   if (!published || typeof published.revision !== 'string') return null;
   try {
-    return { revision: published.revision, selection: normalize(published.selection), origin: shared ? 'shared locally' : 'imported' };
+    return { revision: published.revision, selection: normalizeSelection(published.selection), origin: shared ? 'shared locally' : 'imported' };
   } catch {
     return null;
   }
@@ -95,7 +95,6 @@ export function reviewTeamSelection(host, api, publish = false) {
   output.setAttribute('role', 'status');
   const info = facts([
     ['Organization', current.organization || 'Required'],
-    ['Policy owner (draft)', current.owner || 'Required'],
     ['CLI targets', String(current.clients.length)],
     ['Exact Catalog items', String(current.items.length)],
     ['Supporting files shared with members', current.files.map(file=>file.name).join(', ') || 'None'],
@@ -140,6 +139,18 @@ export function reviewTeamSelection(host, api, publish = false) {
     list, buttons, ...(!publish || !managed ? [output] : [])));
 }
 
+// Only a merged pull request identifies who published the policy. A commit author is not verified.
+export function publisherFacts(publisher) {
+  const commit = typeof publisher?.commit === 'string' ? publisher.commit : null;
+  if (publisher?.status === 'verified' && typeof publisher.login === 'string' && Number.isSafeInteger(publisher.pull)) {
+    return [['Published by', publisher.login + ' · merged pull request #' + publisher.pull], ['Policy commit', commit]];
+  }
+  const missing = commit ? 'No merged pull request was found for this policy commit.' : 'The policy commit could not be identified.';
+  return [['Published by', 'Unavailable. ' + missing],
+    ...(publisher?.status === 'unverified' && typeof publisher.author === 'string' ? [['Commit author (unverified)', publisher.author]] : []),
+    ['Policy commit', commit]];
+}
+
 export function showEnterprisePolicy(host, api) {
   const { published, fullData } = api;
   const output = section('Organization selection');
@@ -147,7 +158,7 @@ export function showEnterprisePolicy(host, api) {
   if (published) {
     output.append(facts([
       [published.source ? 'Organization policy ID' : 'Organization', published.selection.organization],
-      ['Policy owner', published.source ? 'Unrecorded in the published policy' : published.selection.owner],
+      ...(published.source ? publisherFacts(published.publisher) : []),
       ['GitHub repository owner', published.source?.repository?.split('/')[0]],
       ['Published Catalog repository', published.selection.catalogPin?.repository],
       ['Published Catalog data commit', published.selection.catalogPin?.commit],
@@ -173,7 +184,7 @@ export function showEnterprisePolicy(host, api) {
   }
   output.append(fileField('Open team selection', '.json,application/json', async file => {
     if (file.size > 1024 * 1024) throw new Error('Choose a team selection smaller than 1 MB.');
-    const selection = normalize(JSON.parse(await file.text()));
+    const selection = normalizeSelection(JSON.parse(await file.text()));
     const issues = checkSelection(selection, fullData);
     if (issues.length) throw new Error(issues.join(' '));
     if (!store(importedKey, { revision: crypto.randomUUID(), selection })) throw new Error('The browser could not open this selection.');

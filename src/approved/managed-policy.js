@@ -45,7 +45,7 @@ export function refreshPolicy() {
       if (!result.selection || !result.source?.commitSha) throw Error(result.reason || 'No merged organization policy is available.');
       const historyKey='aih-member-policy-seen:'+JSON.stringify(configuration.destination);
       const old=policy || readStored(historyKey,null);
-      policy = {selection:result.selection,revision:result.source.commitSha,source:result.source,origin:'Administrator-configured GitHub branch'};
+      policy = {selection:result.selection,revision:result.source.commitSha,source:result.source,publisher:result.publisher,origin:'Administrator-configured GitHub branch'};
       store(historyKey,{revision:policy.revision,selection:{items:policy.selection.items,clients:policy.selection.clients}});
       if (old && Array.isArray(old.selection?.items) && Array.isArray(old.selection.clients) && old.revision !== policy.revision) {
         const before = new Set(old.selection.items), after = new Set(policy.selection.items);

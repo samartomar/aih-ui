@@ -5,6 +5,9 @@ import { loadPublic } from '../workbench/local-packages.mjs';
 const schema = 'urn:aihq:core:organization:0.1.0';
 const selectionFormat = 'aih-workbench-team-selection/1';
 const selectionError = message => Object.assign(Error(message), {enterpriseStatus:422});
+// A Tool Setup recipe's plan also configures its companion MCP item. Its entry is
+// permitted with the recipe but is not a separately chosen item for members.
+const companionPrefix = 'tool-setup-companion-';
 const entryId = (prefix, value) => prefix + '-' + createHash('sha256').update(value).digest('hex').slice(0, 24);
 
 export const personalFileChange = {
@@ -65,13 +68,13 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog }
   async function buildPolicy(selection) {
     const { contracts, harness, personalIdentity } = await load();
     if (selection?.format !== selectionFormat || !checkedText(selection.organization, 100) || !selection.organization.trim() ||
-      !checkedText(selection.owner, 160) || !selection.owner.trim() || !checkedText(selection.source, 500) ||
+      (selection.owner !== undefined && !checkedText(selection.owner, 160)) || !checkedText(selection.source, 500) ||
       !uniqueStrings(selection.clients) || !selection.clients.length || !uniqueStrings(selection.items) ||
       !Array.isArray(selection.files) ||
       !selection.versions || Object.keys(versions).length !== 3 ||
       Object.keys(selection.versions).length !== 3 || Object.entries(versions).some(([name, version]) => selection.versions[name] !== version) ||
       (selection.allowPersonal !== undefined && typeof selection.allowPersonal !== 'boolean')) {
-      throw selectionError('Choose an organization, owner, CLI targets and the currently installed product version pins.');
+      throw selectionError('Choose an organization, CLI targets and the currently installed product version pins.');
     }
     if (selection.files.length > 16 || selection.files.some(file => !validPersonalFile(file) || typeof file.allowUpdates !== 'boolean') ||
       new Set(selection.files.map(file => file.name.toLowerCase())).size !== selection.files.length) {
@@ -98,13 +101,16 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog }
     if (chosen.some(item => !item || !exact.has(item.id))) throw selectionError('A selected item is unavailable from the exact pinned Catalog.');
     const itemKey = item => JSON.stringify([item.framework, item.id]);
     const selectedIds = new Set(chosen.map(item => itemKey(exact.get(item.id))));
+    const companionIds = new Set(chosen.map(item => exact.get(item.id)).filter(item => item.kind === 'ai-setup' && item.setup?.mcpItem)
+      .map(item => itemKey({framework:item.framework, id:item.setup.mcpItem})).filter(key => !selectedIds.has(key)));
     const excludedClients = harness.listTools().tools.map(tool => tool.id).filter(id => !selectedClients.includes(id));
     const allowedFrameworks = new Set(chosen.map(item => exact.get(item.id).framework));
     const entries = inventory.items.filter(item => allowedFrameworks.has(item.framework)).flatMap(item => {
       const content = { item: item.id, framework: item.framework };
       const key = itemKey(item);
-      if (!selectedIds.has(key)) return [{id:entryId('exclude', key), obligation:'prohibited', content}];
-      return [{id:entryId('selected', key), obligation:'permitted', scopes:['project'], clients:selectedClients, content},
+      const companion = companionIds.has(key);
+      if (!selectedIds.has(key) && !companion) return [{id:entryId('exclude', key), obligation:'prohibited', content}];
+      return [{id:companion ? companionPrefix + entryId('entry', key) : entryId('selected', key), obligation:'permitted', scopes:['project'], clients:selectedClients, content},
         ...(excludedClients.length ? [{id:entryId('other-clis', key), obligation:'prohibited', scopes:['project'], clients:excludedClients, content}] : []),
         {id:entryId('other-scope', key), obligation:'prohibited', scopes:['user'], content}];
     });
@@ -126,7 +132,7 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog }
     const content = { schema, id, entries,
       sources:{ frameworks:[...allowedFrameworks], published:[{repository:inventory.data.repository,commit:inventory.data.commit}], own:{kinds:[]} } };
     validate(contracts, content);
-    return {content, selection: {format:selectionFormat, organization:selection.organization.trim(), owner:selection.owner.trim(),
+    return {content, selection: {format:selectionFormat, organization:selection.organization.trim(),
       source:selection.source.trim(), clients:selection.clients, items:selection.items, versions, files:selection.files,
       allowPersonal:selection.allowPersonal === true}};
   }
@@ -159,7 +165,7 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog }
     for (const item of published.items) {
       const framework = source.catalog.frameworks.find(framework => framework.sha256 === item.framework);
       if (!framework) continue;
-      const matching = permits.filter(entry => entry.content?.item === item.itemId && entry.content.framework === framework.id &&
+      const matching = permits.filter(entry => !entry.id.startsWith(companionPrefix) && entry.content?.item === item.itemId && entry.content.framework === framework.id &&
         !entry.content.recipe && (!entry.content.kind || entry.content.kind === item.kind));
       if (!matching.length) continue;
       const clients = [];
