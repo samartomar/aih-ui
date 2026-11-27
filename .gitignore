@@ -6,3 +6,4 @@ dist/
 .aih-ui/
 .env*
 .playwright-cli/
+.ua/
