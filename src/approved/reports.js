@@ -130,10 +130,8 @@ export function renderReports(host, api) {
     });
 }
 
-// Core leaves the PATH entry number as `?` when it cannot identify it. Show readable text only:
-// a string, without that placeholder, and nothing for an object or an empty value.
-const readable = value => typeof value === 'string' && /[\p{L}\p{N}]/u.test(value) ? value.trim()
-  .replace(/\bPATH entry \?(?= for\b)/g, 'an unnumbered PATH entry').replace(/\bPATH entry \?/g, 'PATH') : null;
+// Show readable text only: a string, and nothing for an object or an empty value.
+const readable = value => typeof value === 'string' && /[\p{L}\p{N}]/u.test(value) ? value.trim() : null;
 
 export function diagnosticLines(answer) {
   const lines = [...(answer?.observations ?? []).map(row => readable(row?.detail)),

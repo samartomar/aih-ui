@@ -8,6 +8,8 @@ import { homeEnvironment } from './consumer/home-environment.mjs';
 import { createLocalCatalog } from './workbench/local-catalog.mjs';
 import { createEnterprisePolicy } from './server/enterprise-core-policy.mjs';
 import { createEnterpriseExecution } from './server/enterprise-core-execution.mjs';
+import { selectedClientTarget } from './workbench/client-target.mjs';
+import { loadPublic } from './workbench/local-packages.mjs';
 
 const [consumerArg, fixture] = process.argv.slice(2);
 if (!consumerArg) throw Error('Pass a prepared consumer with public Core and Catalog installed and its pinned source cache.');
@@ -79,19 +81,40 @@ async function checkEnterpriseHandoff(dir) {
   // Earlier saved selections carried a typed owner; it still builds the same Core document.
   assert.deepEqual((await policy.buildPolicy({...choices, owner:'Fixture Steward'})).content, output.content);
   assert.equal(Object.hasOwn(output.selection, 'owner'), false);
-  // A permitted Tool Setup recipe reaches members with its companion MCP item admitted
-  // but not listed. An unselected recipe stays unavailable.
+  // A permitted Tool Setup recipe reaches members without any companion entry: Core admits
+  // its companion MCP item only inside the recipe's plan (C81). An unselected recipe stays unavailable.
   const recipes = items.filter(item => item.kind === 'ai-setup');
   const [permittedRecipe, ...otherRecipes] = recipes;
   assert.ok(permittedRecipe?.setup?.mcpItem && otherRecipes.length);
+  const recipeFramework = frameworks.find(entry => entry.id === permittedRecipe.framework).frameworkId;
+  const companionItem = items.find(item => item.itemId === permittedRecipe.setup.mcpItem && item.framework === permittedRecipe.framework);
+  assert.ok(companionItem, 'The pinned recipe names a companion MCP item in its framework.');
   const recipePolicy = await policy.buildPolicy({...choices, clients:['claude-code','codex'], items:[permittedRecipe.id], files:[], allowPersonal:false});
+  assert.ok(recipePolicy.content.entries.every(entry => !entry.id.startsWith('tool-setup-companion-')), 'No companion entry is written.');
+  assert.deepEqual(recipePolicy.content.entries.filter(entry => entry.content?.item === companionItem.itemId &&
+    entry.content.framework === recipeFramework).map(entry => entry.obligation), ['prohibited']);
   const recipeSelection = await policy.openPolicy(recipePolicy.content);
   assert.deepEqual(recipeSelection.items, [permittedRecipe.id], JSON.stringify(recipeSelection));
   assert.deepEqual(recipeSelection.itemClients[permittedRecipe.id], ['claude-code','codex']);
   for (const other of otherRecipes) assert.ok(!recipeSelection.items.includes(other.id));
-  const withoutCompanion = {...recipePolicy.content, entries:recipePolicy.content.entries.map(entry =>
-    entry.content?.item === permittedRecipe.setup.mcpItem && entry.obligation === 'permitted' ? {...entry, obligation:'prohibited'} : entry)};
-  assert.deepEqual((await policy.openPolicy(withoutCompanion)).items, []);
+  // A plan that installs the companion MCP item on its own is judged by its own prohibition and denied.
+  const [{api:contracts}, {api:harness}] = await Promise.all([loadPublic(consumer, '@aihq/core', './contracts'),
+    loadPublic(consumer, '@aihq/core', './harness')]);
+  const alone = parts.prepareSelection([companionItem], 'claude-code').requestParts;
+  assert.ok(alone, 'The prepared Catalog plans the companion MCP item on its own.');
+  const aloneDecision = await contracts.previewAdmission({organization:recipePolicy.content, request:{...alone,
+    schema:'urn:aihq:core:plan-request:0.1.0', mode:'enterprise', scope:'project',
+    target:{project:null, client:selectedClientTarget(harness, 'claude-code')}}});
+  assert.equal(aloneDecision.status, 'ok', JSON.stringify(aloneDecision));
+  assert.equal(aloneDecision.value.admitted, false, 'The companion MCP item alone is not admitted.');
+  // A policy published before this change still opens to the recipe, not a separate MCP item.
+  const legacyPolicy = {...recipePolicy.content, entries:recipePolicy.content.entries.map(entry =>
+    entry.content?.item === companionItem.itemId && entry.content.framework === recipeFramework ?
+      {...entry, id:'tool-setup-companion-entry-' + '0'.repeat(24), obligation:'permitted', scopes:['project'], clients:['claude-code','codex']} : entry)};
+  assert.deepEqual((await policy.openPolicy(legacyPolicy)).items, [permittedRecipe.id]);
+  const withoutRecipe = {...recipePolicy.content, entries:recipePolicy.content.entries.map(entry =>
+    entry.content?.item === permittedRecipe.itemId && entry.obligation === 'permitted' ? {...entry, obligation:'prohibited'} : entry)};
+  assert.deepEqual((await policy.openPolicy(withoutRecipe)).items, []);
   // A member host whose own platform is unqualified still receives a recipe the policy
   // permits when Catalog qualifies it on another platform; Core admits that plan.
   const qualifiedOn = item => new Set(item.setup.qualifications.filter(record => record.status === 'qualified').map(record => record.platform));
@@ -103,7 +126,7 @@ async function checkEnterpriseHandoff(dir) {
   const otherHostSelection = await otherHostPolicy.openPolicy(recipePolicy.content);
   assert.deepEqual(otherHostSelection.items, [permittedRecipe.id], JSON.stringify(otherHostSelection));
   assert.deepEqual(otherHostSelection.itemClients[permittedRecipe.id], ['claude-code','codex']);
-  assert.deepEqual((await otherHostPolicy.openPolicy(withoutCompanion)).items, []);
+  assert.deepEqual((await otherHostPolicy.openPolicy(withoutRecipe)).items, []);
   const unqualified = {...otherHost, catalog:{...parts.catalog, items:parts.catalog.items.map(item => item.id === permittedRecipe.itemId ?
     {...item, setup:{...item.setup, qualifications:item.setup.qualifications.filter(record => record.status !== 'qualified')}} : item)}};
   const noQualified = createEnterprisePolicy({consumer,summary,catalog:async () => unqualified,published:{items,frameworks}});

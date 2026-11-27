@@ -5,9 +5,10 @@ import { loadPublic } from '../workbench/local-packages.mjs';
 const schema = 'urn:aihq:core:organization:0.1.0';
 const selectionFormat = 'aih-workbench-team-selection/1';
 const selectionError = message => Object.assign(Error(message), {enterpriseStatus:422});
-// A Tool Setup recipe's plan also configures its companion MCP item. Core has no
-// recipe-scoped admission, so the companion is permitted with its recipe. Members are
-// not offered it as a separate item while the same policy permits that recipe.
+// A Tool Setup recipe's plan also configures its companion MCP item. Core judges that item
+// by the recipe's entries inside the recipe's plan, so an unselected companion is prohibited
+// like any other item. Policies published earlier carry a separate companion entry; members
+// are not offered it as an item while the same policy permits that recipe.
 const companionPrefix = 'tool-setup-companion-';
 // Plan with the Catalog source's own platform cell.
 const hostPlatform = undefined;
@@ -112,15 +113,13 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog, 
         return mcp && !selectedIds.has(itemKey(mcp)) ? [{item:mcp.id, framework:mcp.framework, title:mcp.title ?? mcp.id,
           recipe:recipe.id, recipeTitle:recipe.title ?? recipe.id}] : [];
       });
-    const companionIds = new Set(companions.map(companion => itemKey({framework:companion.framework, id:companion.item})));
     const excludedClients = harness.listTools().tools.map(tool => tool.id).filter(id => !selectedClients.includes(id));
     const allowedFrameworks = new Set(chosen.map(item => exact.get(item.id).framework));
     const entries = inventory.items.filter(item => allowedFrameworks.has(item.framework)).flatMap(item => {
       const content = { item: item.id, framework: item.framework };
       const key = itemKey(item);
-      const companion = companionIds.has(key);
-      if (!selectedIds.has(key) && !companion) return [{id:entryId('exclude', key), obligation:'prohibited', content}];
-      return [{id:companion ? companionPrefix + entryId('entry', key) : entryId('selected', key), obligation:'permitted', scopes:['project'], clients:selectedClients, content},
+      if (!selectedIds.has(key)) return [{id:entryId('exclude', key), obligation:'prohibited', content}];
+      return [{id:entryId('selected', key), obligation:'permitted', scopes:['project'], clients:selectedClients, content},
         ...(excludedClients.length ? [{id:entryId('other-clis', key), obligation:'prohibited', scopes:['project'], clients:excludedClients, content}] : []),
         {id:entryId('other-scope', key), obligation:'prohibited', scopes:['user'], content}];
     });
@@ -171,7 +170,7 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog, 
     const acceptsFile = (change, inputs, target) => accepted({
       ...requestFor('change', target),changes:[{managementId:change.id,change,inputs,requires:[]}],
     });
-    // Hide a companion entry only while this document also permits a recipe that configures it.
+    // Hide an earlier policy's companion entry only while this document also permits a recipe that configures it.
     const contentKey = (framework, item) => JSON.stringify([framework, item]);
     const configured = new Set(permits.filter(entry => !entry.id.startsWith(companionPrefix) && entry.content?.item).flatMap(entry => {
       const recipe = source.catalog.items.find(item => item.id === entry.content.item && item.framework === entry.content.framework);

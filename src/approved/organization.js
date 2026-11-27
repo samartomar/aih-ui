@@ -50,17 +50,18 @@ export function normalizeSelection(value) {
   };
 }
 
-// Core has no recipe-scoped admission, so permitting a Tool Setup recipe also permits the
-// MCP item its plan configures. Name each one for the administrator before publication.
-export function companionNotice({ title, recipeTitle }) {
-  return 'Also permits ' + title + ': configured by ' + recipeTitle + ', for the same CLI targets and project scope.';
+// A Tool Setup recipe's plan configures its companion MCP item, which Core admits only inside
+// that plan. Name each one for the administrator; a shared title shows the item's Catalog ID.
+export function companionNotice({ item, title, recipeTitle }) {
+  const name = title === recipeTitle && item ? item : title;
+  return recipeTitle + ' includes its MCP server configuration (' + name + '), which members cannot install on its own.';
 }
 
 export function toolSetupCompanions(selection, data) {
   const chosen = new Set(selection.items);
   return data.items.filter(recipe => chosen.has(recipe.id) && recipe.kind === 'ai-setup' && recipe.mcpItem).flatMap(recipe => {
     const mcp = data.items.find(item => item.framework === recipe.framework && item.itemId === recipe.mcpItem);
-    return mcp && !chosen.has(mcp.id) ? [{ title: mcp.title ?? mcp.itemId, recipeTitle: recipe.title ?? recipe.itemId }] : [];
+    return mcp && !chosen.has(mcp.id) ? [{ item: mcp.itemId, title: mcp.title ?? mcp.itemId, recipeTitle: recipe.title ?? recipe.itemId }] : [];
   });
 }
 
