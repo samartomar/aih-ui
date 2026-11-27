@@ -92,6 +92,22 @@ async function checkEnterpriseHandoff(dir) {
   const withoutCompanion = {...recipePolicy.content, entries:recipePolicy.content.entries.map(entry =>
     entry.content?.item === permittedRecipe.setup.mcpItem && entry.obligation === 'permitted' ? {...entry, obligation:'prohibited'} : entry)};
   assert.deepEqual((await policy.openPolicy(withoutCompanion)).items, []);
+  // A member host whose own platform is unqualified still receives a recipe the policy
+  // permits when Catalog qualifies it on another platform; Core admits that plan.
+  const qualifiedOn = item => new Set(item.setup.qualifications.filter(record => record.status === 'qualified').map(record => record.platform));
+  const unqualifiedCell = ['windows-x64','darwin-arm64','linux-arm64','linux-x64'].find(cell => !qualifiedOn(permittedRecipe).has(cell));
+  assert.ok(unqualifiedCell && qualifiedOn(permittedRecipe).size, 'The pinned recipe needs qualified and unqualified platforms.');
+  const otherHost = {...parts, prepareSelection:(selected, client, cell = unqualifiedCell) => parts.prepareSelection(selected, client, cell)};
+  assert.equal(otherHost.prepareSelection([permittedRecipe], 'claude-code').requestParts, null);
+  const otherHostPolicy = createEnterprisePolicy({consumer,summary,catalog:async () => otherHost,published:{items,frameworks}});
+  const otherHostSelection = await otherHostPolicy.openPolicy(recipePolicy.content);
+  assert.deepEqual(otherHostSelection.items, [permittedRecipe.id], JSON.stringify(otherHostSelection));
+  assert.deepEqual(otherHostSelection.itemClients[permittedRecipe.id], ['claude-code','codex']);
+  assert.deepEqual((await otherHostPolicy.openPolicy(withoutCompanion)).items, []);
+  const unqualified = {...otherHost, catalog:{...parts.catalog, items:parts.catalog.items.map(item => item.id === permittedRecipe.itemId ?
+    {...item, setup:{...item.setup, qualifications:item.setup.qualifications.filter(record => record.status !== 'qualified')}} : item)}};
+  const noQualified = createEnterprisePolicy({consumer,summary,catalog:async () => unqualified,published:{items,frameworks}});
+  assert.deepEqual((await noQualified.openPolicy(recipePolicy.content)).items, [], 'A recipe without a qualified platform is not offered.');
   assert.equal(output.content.schema,'urn:aihq:core:organization:0.1.0');
   await install(output.content);
   assert.deepEqual(managed.selection.items,[allowed.id]);
@@ -166,7 +182,7 @@ async function checkEnterpriseHandoff(dir) {
     const changed = await native.impact();
     assert.equal(changed.entries.find(e=>e.itemId===skill)?.status,'denied',JSON.stringify(changed));
     assert.ok((await readdir(join(project,'.claude','skills'))).includes('brainstorming'));
-    console.log(JSON.stringify({catalog:skill,recipe:permittedRecipe.itemId,fileState:applied.fileState,mixed:mixed.code,wrongCLI:wrongCLI.code,
+    console.log(JSON.stringify({catalog:skill,recipe:permittedRecipe.itemId,otherHostCell:unqualifiedCell,fileState:applied.fileState,mixed:mixed.code,wrongCLI:wrongCLI.code,
     deniedPersonal:deniedPersonal.code,stale:stale.diagnostics[0],personal:personalApply.status,orgFiles:teamFiles.map(f=>f.name),
       installedImpact:changed.entries.find(e=>e.itemId===skill)?.status}));
   } finally {

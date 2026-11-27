@@ -168,11 +168,24 @@ export function createEnterprisePolicy({ consumer, published, summary, catalog }
       const matching = permits.filter(entry => !entry.id.startsWith(companionPrefix) && entry.content?.item === item.itemId && entry.content.framework === framework.id &&
         !entry.content.recipe && (!entry.content.kind || entry.content.kind === item.kind));
       if (!matching.length) continue;
+      // A Tool Setup recipe is planned for this host's platform first, then for each other
+      // platform Catalog qualifies it on, so members receive it whatever their host's platform.
+      // A recipe without a qualified platform is not offered. Core admits each plan.
+      const setup = item.kind === 'ai-setup' ? source.catalog.items.find(entry => entry.id === item.itemId &&
+        entry.framework === framework.id)?.setup : null;
+      const cells = item.kind !== 'ai-setup' ? [undefined] : [...new Set((setup?.qualifications ?? [])
+        .filter(record => record.status === 'qualified' && typeof record.platform === 'string').map(record => record.platform))];
+      if (cells.length && item.kind === 'ai-setup') cells.unshift(undefined);
       const clients = [];
       for (const {id, target} of tools) {
         if (!matching.some(entry => canUse(entry, target))) continue;
-        const {requestParts} = source.prepareSelection([item], id);
-        if (requestParts && await accepted({...requestParts,...requestFor('plan', target)})) clients.push(target.id);
+        for (const cell of cells) {
+          const {requestParts} = source.prepareSelection([item], id, cell);
+          if (requestParts && await accepted({...requestParts,...requestFor('plan', target)})) {
+            clients.push(target.id);
+            break;
+          }
+        }
       }
       if (clients.length) itemClients.set(item.id, clients);
     }

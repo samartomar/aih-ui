@@ -220,10 +220,10 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
       scope: 'project', data: { repository: snapshot.data.repository, commit: pin },
     });
   }
-  function plan(ids, client, configureTools = false) {
+  function plan(ids, client, configureTools = false, cell = platform) {
     if (!profiles.has(client) || !Array.isArray(ids) || !ids.length || ids.some(id => !byId.has(id)) || new Set(ids).size !== ids.length) throw invalid('Choose known items and one published client');
     if (configureTools && ids.every(id => byId.get(id).entry.setup)) {
-      return { client, selection: ids, execution: 'preview-only', notice: 'Configuration preview for the selected tools on ' + platform + '.', plan: planTools(ids, client) };
+      return { client, selection: ids, execution: 'preview-only', notice: 'Configuration preview for the selected tools on ' + cell + '.', plan: planTools(ids, client, cell) };
     }
     return { client, selection: ids, execution: 'preview-only', notice: 'Preview the planned project changes. Review installation verifies the required source files and asks Core for an approval review.', plan: planItems(ids, client, contents) };
   }
@@ -239,8 +239,8 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     }
     return reader.planInstall(ids, contents, selected, options);
   }
-  function catalogPreview(ids, client) {
-    const response = plan(ids, client, true);
+  function catalogPreview(ids, client, cell = platform) {
+    const response = plan(ids, client, true, cell);
     return {response, requestParts:admissionParts(response.plan, new Set(ids), client)};
   }
   function profilePreview(bundle, client) {
@@ -295,14 +295,16 @@ export async function createLocalCatalog(consumer, sourceCache, inputConsumer = 
     return { ...planTools(ids, client, cell), source: toolData.source,
       recipe: ids.length === toolCombination.members.length && toolCombination.members.every(id => ids.includes(id)) ? toolCombination.id : null };
   }
-  function prepareSelection(items, client) {
+  // A Tool Setup recipe can be planned for another qualified platform cell than this host's.
+  function prepareSelection(items, client, cell = platform) {
+    if (!/^(windows|darwin|linux)-(x64|arm64)$/.test(cell)) throw invalid('Choose a published platform.');
     const ids = items.map(({ id, itemId }) => {
       const entry = byId.get(itemId)?.entry;
       const framework = frameworks.find(value => value.id === entry?.framework);
       if (!entry || id !== `${framework?.sha256}/${itemId}`) throw invalid('The exact item is unavailable from the prepared Catalog source.');
       return itemId;
     });
-    return catalogPreview(ids, client);
+    return catalogPreview(ids, client, cell);
   }
   return { catalog, evidence, reviewEvidence, plan, assets, readAsset, profilePreview, catalogPreview, previewTools, prepareSelection };
 }
