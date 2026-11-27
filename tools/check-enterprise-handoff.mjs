@@ -100,8 +100,12 @@ async function checkEnterpriseHandoff(dir) {
   // A plan that installs the companion MCP item on its own is judged by its own prohibition and denied.
   const [{api:contracts}, {api:harness}] = await Promise.all([loadPublic(consumer, '@aihq/core', './contracts'),
     loadPublic(consumer, '@aihq/core', './harness')]);
-  const alone = parts.prepareSelection([companionItem], 'claude-code').requestParts;
-  assert.ok(alone, 'The prepared Catalog plans the companion MCP item on its own.');
+  // Catalog plans the companion only with its AI setup, so drop the setup's own steps from the recipe's plan.
+  const recipeParts = parts.prepareSelection([permittedRecipe], 'claude-code').requestParts;
+  assert.ok(recipeParts, 'The prepared Catalog plans the recipe on this host.');
+  const companionSteps = recipeParts.plan.plan.filter(step => !step.aiSetup);
+  assert.ok(companionSteps.length && companionSteps.length < recipeParts.plan.plan.length, 'The recipe plan has AI setup and companion steps.');
+  const alone = {...recipeParts, plan:{...recipeParts.plan, plan:companionSteps}};
   const aloneDecision = await contracts.previewAdmission({organization:recipePolicy.content, request:{...alone,
     schema:'urn:aihq:core:plan-request:0.1.0', mode:'enterprise', scope:'project',
     target:{project:null, client:selectedClientTarget(harness, 'claude-code')}}});
