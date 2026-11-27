@@ -46,7 +46,8 @@ export async function approvedCatalog() {
     for (const item of catalog.listItems(checked.content)) {
       items.push({ id: `${sha256}/${item.id}`, itemId: item.id, title: item.name ?? item.id, kind: item.kind,
         description: item.description, framework: sha256, frameworkName: framework.name, scanKey: item.scanKey,
-        contentSha256: item.contentSha256 });
+        contentSha256: item.contentSha256,
+        ...(item.kind === 'ai-setup' && typeof item.aiSetup?.mcpItem === 'string' ? { mcpItem: item.aiSetup.mcpItem } : {}) });
     }
   }
   return { state: 'read-only', frameworks: [...frameworks.values()], items, problems };

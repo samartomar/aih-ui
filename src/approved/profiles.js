@@ -130,12 +130,10 @@ export function renderProfiles(host, api) {
       edit(kind === 'saved' ? profile : { ...profile, id: crypto.randomUUID() })),
     action('Export Profile', () => share('export')), action('Prepare public Profile', () => share('public')));
     if (kind === 'saved') buttons.append(action('Share in this browser', () => share('local')));
-    if (api.role !== 'individual' && (kind === 'saved' || kind === 'team')) {
-      const propose = action('Propose team Profile', () => share('team'));
-      propose.hidden = true;
-      buttons.append(propose);
-      proposeAccess.then(config => { propose.hidden = !canProposeTeamProfile(api.role, kind, config); });
-    }
+    const propose = action('Propose team Profile', () => share('team'));
+    propose.hidden = true;
+    buttons.append(propose);
+    proposeAccess.then(config => { propose.hidden = !canProposeTeamProfile(api.role, kind, config); });
     const use = action('Use this Profile', () => {
       const current = resolveProfileChoices(profile, api.fullData ?? api.data, enterprise ? api.currentData() : undefined);
       if (enterprise && (!api.published || !current.eligible)) {

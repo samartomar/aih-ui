@@ -15,8 +15,10 @@ export function recipePermitted(data, item, client) {
   return !data.itemClients || data.itemClients[item.id]?.includes(client) === true;
 }
 
+// Without chosen targets, a recipe is offered only when no organization policy restricts it.
 export function offeredToolRecipes(data, clients) {
-  return selectedToolRecipes(data.items).filter(item => !data.itemClients || clients.some(client => recipePermitted(data, item, client)));
+  const targets = clients.length ? clients : [null];
+  return selectedToolRecipes(data.items).filter(item => targets.some(client => recipePermitted(data, item, client)));
 }
 
 async function previewSetup(ids, client, platform) {
@@ -111,16 +113,16 @@ export function renderToolSetup(host, api) {
   const preview = action('Preview setup', async () => {
     const began = ++revision;
     const ids = selected().map(item => item.id);
-    const permitted = client => selected().filter(item => recipePermitted(data, item, client.id)).map(item => item.id);
     const targetPlatform = platform.value;
     preview.disabled = true;
     status.textContent = 'Reading the pinned Catalog preview…';
     output.replaceChildren();
     try {
-      const results = await Promise.all(targets().map(async client => ({
-        client, result: permitted(client).length ? await previewSetup(permitted(client), client.id, targetPlatform)
-          : { status: 'unavailable', reason: 'The organization policy does not permit the selected tools for this CLI.' },
-      })));
+      const results = await Promise.all(targets().map(async client => {
+        const permitted = selected().filter(item => recipePermitted(data, item, client.id)).map(item => item.id);
+        return { client, result: permitted.length ? await previewSetup(permitted, client.id, targetPlatform)
+          : { status: 'unavailable', reason: 'The organization policy does not permit the selected tools for this CLI.' } };
+      }));
       if (revision !== began || !host.isConnected) return;
       status.textContent = 'Review the proposed project changes for each CLI.';
       for (const { client, result } of results) output.append(planResult(client, result));

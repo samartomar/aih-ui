@@ -1,5 +1,6 @@
 import { action, downloadJson, facts, fileField, hint, link, node, readStored, section, store } from './dom.js';
 import { renderGitHubRecovery, teamProfileRequest, canRetryProposal } from './profile-sharing.js';
+import { companionNotice } from './organization.js';
 
 const endpoint = '/api/enterprise/github/';
 let configuration = {status:'loading'};
@@ -210,7 +211,8 @@ export function publishPolicy(host, api, selection, reviewed) {
       const document=node('details');
       document.append(node('summary','Review the exact policy file'),node('pre',result.content));
       proposal.replaceChildren(facts([['GitHub account',result.identity?.login],['Repository',result.target.repository],['Branch',result.target.baseBranch],
-        ['File',result.target.path],['Base commit',result.target.baseSha],['Document digest',result.digest]]),document,confirm);
+        ['File',result.target.path],['Base commit',result.target.baseSha],['Document digest',result.digest]]),
+        ...(result.companions ?? []).map(companion=>hint(companionNotice(companion))),document,confirm);
       proposalNotice.textContent='';
     } catch(error){if(!api.signal.aborted) proposalNotice.textContent=error.message;} finally{busy=false;preview.disabled=false;}
   },true);

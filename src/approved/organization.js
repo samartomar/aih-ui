@@ -50,6 +50,20 @@ export function normalizeSelection(value) {
   };
 }
 
+// Core has no recipe-scoped admission, so permitting a Tool Setup recipe also permits the
+// MCP item its plan configures. Name each one for the administrator before publication.
+export function companionNotice({ title, recipeTitle }) {
+  return 'Also permits ' + title + ': configured by ' + recipeTitle + ', for the same CLI targets and project scope.';
+}
+
+export function toolSetupCompanions(selection, data) {
+  const chosen = new Set(selection.items);
+  return data.items.filter(recipe => chosen.has(recipe.id) && recipe.kind === 'ai-setup' && recipe.mcpItem).flatMap(recipe => {
+    const mcp = data.items.find(item => item.framework === recipe.framework && item.itemId === recipe.mcpItem);
+    return mcp && !chosen.has(mcp.id) ? [{ title: mcp.title ?? mcp.itemId, recipeTitle: recipe.title ?? recipe.itemId }] : [];
+  });
+}
+
 export function selectionFor(draft) {
   return normalizeSelection({ format, organization: draft.organization, source: draft.source, files: draft.files, allowPersonal:draft.allowPersonal === true,
     clients: draft.clients, items: draft.items, versions: draft.versions });
@@ -100,6 +114,7 @@ export function reviewTeamSelection(host, api, publish = false) {
     ['Supporting files shared with members', current.files.map(file=>file.name).join(', ') || 'None'],
     ['Current local revision', latest?.revision],
   ]);
+  const companions = toolSetupCompanions(current, api.data).map(companion => hint(companionNotice(companion)));
   const list = node('ul');
   for (const issue of problems) list.append(node('li', issue));
   const buttons = node('div', null, 'ix-buttons');
@@ -136,19 +151,28 @@ export function reviewTeamSelection(host, api, publish = false) {
   host.append(section(publish ? managed ? 'Organization selection draft' : 'Local organization selection' : 'Review the organization selection', info,
     hint(managed ? 'The administrator-configured GitHub branch supplies the member policy. Core evaluates and applies changes.' :
       'This selection controls what the Enterprise User can choose in this browser. Core evaluates and applies changes.'),
-    list, buttons, ...(!publish || !managed ? [output] : [])));
+    ...companions, list, buttons, ...(!publish || !managed ? [output] : [])));
 }
 
 // Only a merged pull request identifies who published the policy. A commit author is not verified.
-export function publisherFacts(publisher) {
+// The branch commit read is shown only when later commits did not change the policy file.
+export function publisherFacts(publisher, branchCommit) {
   const commit = typeof publisher?.commit === 'string' ? publisher.commit : null;
-  if (publisher?.status === 'verified' && typeof publisher.login === 'string' && Number.isSafeInteger(publisher.pull)) {
-    return [['Published by', publisher.login + ' · merged pull request #' + publisher.pull], ['Policy commit', commit]];
+  const change = commit && 'policy change ' + commit.slice(0, 7);
+  const author = typeof publisher?.author === 'string' ? [['Commit author (unverified)', publisher.author]] : [];
+  let rows;
+  if (publisher?.status === 'verified' && typeof publisher.login === 'string' && Number.isSafeInteger(publisher.pull) && commit) {
+    rows = [['Published by', publisher.login + ' · merged pull request #' + publisher.pull + ' · ' + change]];
+  } else if (publisher?.status === 'not-found' && commit) {
+    rows = [['Published by', 'Not verified: no merged pull request was found for ' + change], ...author];
+  } else if (publisher?.status === 'no-commit') {
+    rows = [['Published by', 'Not verified: no commit on this branch changed the policy file.']];
+  } else {
+    rows = [['Published by', 'GitHub could not be checked for the merged pull request. Try again.'], ...author];
   }
-  const missing = commit ? 'No merged pull request was found for this policy commit.' : 'The policy commit could not be identified.';
-  return [['Published by', 'Unavailable. ' + missing],
-    ...(publisher?.status === 'unverified' && typeof publisher.author === 'string' ? [['Commit author (unverified)', publisher.author]] : []),
-    ['Policy commit', commit]];
+  const later = Boolean(commit && branchCommit && branchCommit !== commit);
+  return { rows, branch: branchCommit && (!commit || later) ? ['Branch commit read', branchCommit] : null,
+    note: later ? 'Later commits on this branch did not change the policy file.' : null };
 }
 
 export function showEnterprisePolicy(host, api) {
@@ -156,18 +180,20 @@ export function showEnterprisePolicy(host, api) {
   const output = section('Organization selection');
   if (managedMode()) managedNotice(host, api);
   if (published) {
+    const publisher = published.source ? publisherFacts(published.publisher, published.revision) : null;
     output.append(facts([
       [published.source ? 'Organization policy ID' : 'Organization', published.selection.organization],
-      ...(published.source ? publisherFacts(published.publisher) : []),
+      ...(publisher?.rows ?? []),
       ['GitHub repository owner', published.source?.repository?.split('/')[0]],
       ['Published Catalog repository', published.selection.catalogPin?.repository],
       ['Published Catalog data commit', published.selection.catalogPin?.commit],
       ['Package version pins', published.source ? 'Unrecorded in the published policy' : null],
-      [published.source ? 'Published commit' : 'Local revision', published.revision],
+      publisher ? publisher.branch ?? ['Branch commit read', null] : ['Local revision', published.revision],
       ['Source', published.origin],
       ['CLI targets', String(published.selection.clients.length)],
       ['Catalog items', String(published.selection.items.length)],
     ]));
+    if (publisher?.note) output.append(hint(publisher.note));
     for (const file of published.selection.files) {
       const details = node('details');
       details.append(node('summary', file.name), node('pre', file.text),
