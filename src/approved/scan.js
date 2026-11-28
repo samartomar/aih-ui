@@ -12,10 +12,22 @@ export function evidenceDetails(evidence, { mapSignal } = {}) {
   const authentication = typeof evidence.authentication === 'string' ? evidence.authentication : evidence.authentication?.status;
   const signer = evidence.verification?.signer;
   const publisher = typeof signer === 'string' ? signer : signer?.identity ?? signer?.subject;
+  const coverage = typeof summary.coverage === 'string' ? summary.coverage : summary.completion;
+  const verification = evidence.verification;
+  const signature = verification?.verified === true ? 'Verified'
+    : verification?.status === 'unavailable' ? 'Unavailable'
+    : verification?.status && verification.status !== 'ok' ? 'Could not verify' : null;
+  const authenticationLabel = signature === 'Verified'
+    ? (signer?.trusted === true ? 'Trusted publisher' : 'Publisher not trusted')
+    : (authentication === 'not-verified' ? 'Not verified' : authentication);
   const output = [facts([
+    ['Scan key', summary.scanKey],
     ['Scan label', summary.label ?? summary.verdict],
-    ['Coverage', typeof summary.coverage === 'string' ? summary.coverage : summary.completion],
-    ['Artifact authentication', authentication === 'not-verified' ? 'Not verified' : authentication],
+    ['Risk score', Number.isFinite(summary.score) ? summary.score : null],
+    ['Coverage', { partial: 'Partial', complete: 'Complete' }[coverage] ?? coverage],
+    ['Coverage reason', summary.reason],
+    ['Signature', signature],
+    ['Artifact authentication', authenticationLabel],
     ['Publisher', publisher],
     ['Verification details', evidence.verification?.reason],
     ['Scan date', summary.scannedAt ?? summary.createdAt],
@@ -27,13 +39,21 @@ export function evidenceDetails(evidence, { mapSignal } = {}) {
     const table = node('table', null, 'ix-evidence-table');
     const heading = node('thead');
     const head = node('tr');
-    for (const title of ['Detector', 'Outcome', 'Recorded counts']) head.append(node('th', title));
+    for (const title of ['Detector and mode', 'Outcome', 'Recorded counts']) {
+      const header = node('th', title);
+      header.scope = 'col';
+      head.append(header);
+    }
     heading.append(head);
     const rows = node('tbody');
     for (const report of reports) {
       const tr = node('tr');
       const counts = Object.entries(report.counts ?? {}).map(([severity, count]) => count + ' ' + severity);
-      tr.append(node('th', report.tool ?? report.detectorId), node('td', report.result ?? report.outcome), node('td', counts.join(', ') || 'No counts supplied'));
+      const detector = node('th', report.tool ?? report.detectorId);
+      detector.scope = 'row';
+      const mode = { static: 'Static', ai: 'AI' }[report.mode] ?? report.mode;
+      if (mode) detector.append(node('small', mode));
+      tr.append(detector, node('td', report.result ?? report.outcome), node('td', counts.join(', ') || 'No counts supplied'));
       rows.append(tr);
     }
     table.append(heading, rows);

@@ -1,4 +1,5 @@
 import { iconFor } from '../app/icons.js';
+import { browseSelections } from './catalog-choices.js';
 import { evidenceDetails } from './scan.js';
 import { action, checkbox, facts, field, hint, link, node, section } from './dom.js';
 import { offeredToolRecipes } from './tool-setup.js';
@@ -13,13 +14,19 @@ const categoryLabels = new Map([
 
 const typeLabel = kind => kind === 'ai-setup' ? 'AI setup' : iconFor('kind', kind).label;
 
-export function renderCatalog(host, api, current, update) {
+export function renderCatalog(host, api) {
   const data = api.data;
   const collections = new Map(data.frameworks.map(framework => [framework.id, framework]));
   const categoryOf = framework => framework?.category ?? 'uncategorized';
   const categoryLabel = category => categoryLabels.get(category) ?? category;
   const itemCategory = item => categoryOf(collections.get(item.framework));
   const toolRecipes = new Set(api.role === 'admin' ? [] : offeredToolRecipes(data, api.draft.clients));
+  const itemNames = new Map();
+  const itemNameKey = item => JSON.stringify([item.framework, item.kind, item.title]);
+  for (const item of data.items) {
+    const key = itemNameKey(item);
+    itemNames.set(key, (itemNames.get(key) ?? 0) + 1);
+  }
   const grid = node('div', null, 'ix-catalog-grid');
   const result = node('div', null, 'ix-catalog-list ix-stack');
   const inspector = section('Quick Look', hint('Inspect an item to see its published source, compatibility and Scan evidence.'));
@@ -64,10 +71,28 @@ export function renderCatalog(host, api, current, update) {
   const pinned = new Map();
   let page = 0;
   let request = 0;
-  const selected = new Set(current);
+  const selected = new Set(api.draft.items);
   const available = new Set(data.items.map(item => item.id));
+  const visibleChoices = new Map();
+  let projection = browseSelections(data, selected, api.draft.catalogChoices);
   const previous = node('details', null, 'ix-evidence-fold ix-catalog-prior');
   const pageSize = 8;
+
+  // Record the public identity of an earlier exact choice as soon as the host can still read it.
+  const saved = api.draft.catalogChoices;
+  if (data.hostMode === 'read-only' && (Object.keys(saved ?? {}).length !== Object.keys(projection.saved).length ||
+      Object.entries(projection.saved).some(([id, fingerprint]) => saved?.[id] !== fingerprint))) {
+    api.changeCatalogChoices([...selected], projection.saved);
+  }
+
+  function saveChoices() {
+    const former = projection.replacements;
+    projection = browseSelections(data, selected, projection.saved);
+    api.changeCatalogChoices([...selected], projection.saved);
+    renderPrevious();
+    return former.size !== projection.replacements.size ||
+      [...former].some(([id, old]) => projection.replacements.get(id) !== old);
+  }
 
   async function inspect(item) {
     const id = ++request;
@@ -126,7 +151,8 @@ export function renderCatalog(host, api, current, update) {
   }
 
   function renderPrevious() {
-    const missing = [...selected].filter(id => !available.has(id));
+    const carried = new Set(projection.replacements.values());
+    const missing = [...selected].filter(id => !available.has(id) && !carried.has(id));
     previous.hidden = !data.hostMode || data.hostMode === 'unavailable' || !missing.length;
     if (previous.hidden) return;
     const list = node('ul', null, 'ix-stack');
@@ -134,8 +160,7 @@ export function renderCatalog(host, api, current, update) {
       const row = node('li', null, 'ix-picker-row');
       const remove = action('Remove choice', () => {
         selected.delete(id);
-        update([...selected]);
-        renderPrevious();
+        if (saveChoices()) render();
         if (previous.hidden) search.focus();
         else previous.querySelector('summary').focus();
       });
@@ -160,18 +185,40 @@ export function renderCatalog(host, api, current, update) {
     resultStatus.textContent = items.length ? `${items.length} matching ${items.length === 1 ? 'item' : 'items'}`
       : hasInventory ? 'No items match these filters.' : '';
     result.replaceChildren();
+    visibleChoices.clear();
     const framework = items.length ? collections.get(frameworks.value) : undefined;
     if (framework) result.append(node('h4', `${framework.name} · ${categoryLabel(categoryOf(framework))}`, 'ix-catalog-collection'));
     for (const item of items.slice(page * pageSize, (page + 1) * pageSize)) {
       const row = node('div', null, 'ix-picker-row');
-      const label = checkbox(item.title, selected.has(item.id), value => {
+      const retained = projection.replacements.get(item.id);
+      const label = checkbox(item.title, selected.has(item.id) || !!retained, value => {
         if (value) selected.add(item.id);
-        else selected.delete(item.id);
-        update([...selected]);
+        else selected.delete(retained ?? item.id);
+        if (saveChoices()) {
+          render();
+          visibleChoices.get(item.id)?.focus();
+        }
       });
+      const input = label.querySelector('input');
+      visibleChoices.set(item.id, input);
       const copy = node('div', null, 'ix-stack');
       const metadata = framework ? typeLabel(item.kind) : [item.frameworkName, categoryLabel(itemCategory(item)), typeLabel(item.kind)].join(' · ');
       copy.append(label, hint(metadata));
+      if (itemNames.get(itemNameKey(item)) > 1) {
+        input.setAttribute('aria-label', `${item.title} · ${item.itemId}`);
+        copy.append(hint(item.itemId));
+      }
+      if (retained) {
+        const useCurrent = action('Use current version', () => {
+          selected.delete(retained);
+          selected.add(item.id);
+          saveChoices();
+          render();
+          visibleChoices.get(item.id)?.focus();
+        });
+        useCurrent.setAttribute('aria-label', `Use current version for ${item.title}`);
+        copy.append(hint(`Choice retained. Your draft still pins ${retained.slice(0, 8)}.`), useCurrent);
+      }
       const controls = node('div', null, 'ix-buttons');
       const pin = action(pinned.has(item.id) ? 'Unpin' : 'Pin for comparison', () => togglePin(item));
       pin.setAttribute('aria-label', (pinned.has(item.id) ? 'Unpin ' : 'Pin for comparison: ') + item.title);
