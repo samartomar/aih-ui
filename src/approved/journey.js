@@ -3,6 +3,7 @@ import { action, checkbox, download, downloadJson, facts, field, fileField, hint
 import { repositoryScan } from './repository-scan.js';
 import { renderVersionSets, versionUnavailable } from './versions.js';
 import { renderCatalog } from './catalog.js';
+import { savedCatalogChoices } from './catalog-choices.js';
 import { showEnterprisePolicy, reviewTeamSelection } from './organization.js';
 import { renderToolSetup } from './tool-setup.js';
 import { renderScan } from './scan.js';
@@ -40,7 +41,7 @@ export function stepsFor(role) {
 
 const draftFormat = 'aih-workbench-setup/1';
 export const emptyDraft = () => ({
-  format: draftFormat, allowPersonal:false, clients: [], items: [], organization: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
+  format: draftFormat, allowPersonal:false, clients: [], items: [], catalogChoices: {}, organization: '', source: '', instructions: '', instructionUpdates: 'review', firstTask: '', files: [], tools: [], bases: {}, toolExclusions: [], toolClientExclusions: [], guides: 'included', toolPlatform: 'windows-x64', versions: {}, versionSet: '', reviewed: '',
 });
 
 function cleanDraft(value) {
@@ -53,6 +54,8 @@ function cleanDraft(value) {
       draft.allowPersonal = field;
     } else if (key === 'files') {
       draft.files = checkedFiles(field);
+    } else if (key === 'catalogChoices') {
+      draft.catalogChoices = savedCatalogChoices(field, draft.items);
     } else if (Array.isArray(draft[key])) {
       if (!Array.isArray(field) || field.some(entry => typeof entry !== 'string')) throw new Error('Invalid setup selection.');
       draft[key] = [...new Set(field)];
@@ -151,6 +154,9 @@ function plan(host, api) {
     ['Supporting files', draft.files.map(file => file.name).join(', ') || 'None'],
     ['Source and instructions', draft.source || draft.instructions ? 'Recorded in the setup file' : 'None'],
   ]));
+  if (selected.length !== draft.items.length) {
+    details.append(link('Review earlier Catalog choices', api.route('content')));
+  }
   const output = node('div', null, 'ix-stack');
   if (role === 'enterprise' && data.hostMode === 'read-only') {
     host.append(details);
@@ -214,7 +220,7 @@ export function renderJourney(host, step, api) {
   } else if (step === 'content' || step === 'catalog') {
     const panel = section('Select from Catalog');
     host.append(panel);
-    renderCatalog(panel, api, draft.items, items => change('items', items));
+    renderCatalog(panel, api);
     if (step === 'content') sourceFiles(host, api);
   } else if (step === 'byo') {
     sourceFiles(host, api);

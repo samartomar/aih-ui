@@ -147,6 +147,7 @@ function render(focus = false, refresh = false) {
     currentData: () => role === 'enterprise' ? restrictEnterprise(data, activePolicy()) : data,
     refresh() { render(false, true); },
     change(key, value) { draft[key] = value; saveDraft(draft); },
+    changeCatalogChoices(items, catalogChoices) { Object.assign(draft, { items, catalogChoices }); saveDraft(draft); },
     replaceDraft(value) { saveDraft(value); render(false, true); },
     returnFromProfiles(message) { location.hash = resume.hash; status(message); },
   };

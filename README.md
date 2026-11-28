@@ -6,7 +6,21 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 Install the pinned development dependencies with `npm ci`. Set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ` to the reviewed package archives for one compatible installation, then run `npm run preview` and open the loopback URL it prints. The root opens the Enterprise Admin, Enterprise User and Individual User journeys. The earlier Catalog screen is available at `/classic.html`.
 
-With the content-document Catalog reader, the host reads the bundled AIH content. To include other frameworks, set `AIH_APPROVED_CATALOG_CONTENT` to absolute paths to their content documents, separated by the operating system's path-list delimiter. To display recorded Scan assessments, set `AIH_APPROVED_SCAN_SUMMARIES` to the directory containing the scan-key directories. To preview published Tool Setup recipes, set `AIH_APPROVED_TOOL_CONSUMER` to the prepared consumer directory containing their pinned public inputs. The UI reports missing inputs and incomplete qualifications beside the affected choices.
+With the content-document Catalog reader, the host reads the bundled AIH content. To include other frameworks, set `AIH_APPROVED_CATALOG_CONTENT` to absolute paths to their content documents, separated by the operating system's path-list delimiter. For a maintained Catalog data pin, unpack that Git revision and include the `data/*/content.json` files. With PowerShell, set the list before starting the preview:
+
+```powershell
+$env:AIH_APPROVED_CATALOG_CONTENT = (
+  Get-ChildItem 'C:\path\to\pinned-catalog\data' -Filter content.json -File -Recurse |
+    Sort-Object FullName | Select-Object -ExpandProperty FullName
+) -join [IO.Path]::PathSeparator
+npm run preview
+```
+
+Open **Enterprise Admin → Select from Catalog** or **Individual User → Catalog and your files**. An Enterprise User sees the items in the current organization selection. The Catalog starts with all available items. Search, **Category**, **Type** and **Framework** narrow the same results. Category comes from the checked collection document. An older document without a category appears under **Uncategorized**. **Clear filters** preserves the draft choices. When a previous document disappears, the Catalog retains the selected row if a unique checked replacement has the same source pins, content and behaviour. **Use current version** explicitly replaces the draft's exact pin. Earlier choices without a proven replacement remain visible for review.
+
+To display recorded Scan assessments, set `AIH_APPROVED_SCAN_SUMMARIES` to the directory containing the scan-key directories. To preview published Tool Setup recipes, set `AIH_APPROVED_TOOL_CONSUMER` to the prepared consumer directory containing their pinned public inputs. The UI reports missing inputs and incomplete qualifications beside the affected choices.
+
+For browser acceptance, add the earlier uncategorized Modern Web Guidance `content.json` with the same item contents to the configured path list. Start the normal preview with the category-capable Catalog archive, the Scan 0.1.0 archive and signed Scan summaries for the Modern Web Guidance skill. Run `node tools/check-approved-catalog.mjs <preview-url> <earlier-content-path> [scan-item-id]` with the same path list in the test environment and Playwright Chromium installed. The optional Catalog item ID exercises another current item with a trusted signed partial assessment. Set `PLAYWRIGHT_CHROMIUM_CHANNEL` to `chrome` to use an existing Chrome installation. The check prints the installed package SHA-256 values, inventory counts and inspected Scan key and revision. Record the Catalog Git revision alongside them.
 
 An organization selection shared in this browser is available to the Enterprise User on the same origin. Export a copy for transfer. On a managed host, the configured GitHub repository governs Enterprise operations.
 

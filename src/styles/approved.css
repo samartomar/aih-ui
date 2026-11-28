@@ -548,11 +548,19 @@ html[data-workbench-theme="light"] #intake-view {
 }
 
 
-.ix-catalog-filters {display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+.ix-catalog-filters {display:grid;grid-template-columns:minmax(0,1.3fr) repeat(3,minmax(0,1fr));gap:10px}
+.ix-catalog-filter-summary {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.ix-catalog-collection {margin:0;font-size:.875rem;font-weight:600;color:var(--ink)}
+.ix-catalog-prior code {overflow-wrap:anywhere}
 .ix-catalog-grid {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
+.ix-catalog-grid .ix-summary dd {overflow-wrap:anywhere}
 .ix-catalog-grid pre {overflow:auto;max-block-size:24rem;white-space:pre-wrap}
 .ix-client-options {display:flex;flex-wrap:wrap;gap:8px 14px}
 .ix-v9-frame {display:block;width:100%;min-height:76vh;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+@media (max-width:960px) {
+  .ix-catalog-filters {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ix-catalog-list .ix-picker-row {grid-template-columns:minmax(0,1fr)}
+}
 @media (max-width:680px) {
   .ix-catalog-filters,.ix-catalog-grid {grid-template-columns:1fr}
 }
@@ -619,6 +627,7 @@ html[data-workbench-theme="light"] #intake-view {
 .ix-picker-row {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
 .ix-evidence-table {width:100%;border-collapse:collapse;text-align:start;font-size:.86rem}
 .ix-evidence-table :is(th,td) {padding:7px;border-bottom:1px solid var(--line);text-align:start}
+.ix-evidence-table small {display:block;color:var(--muted);font-weight:400}
 .ix-evidence-files {padding-inline-start:22px;margin-block:8px}
 #ix-pane pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:28rem;overflow:auto}
 
