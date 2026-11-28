@@ -10,7 +10,13 @@ _Avoid_: client (on default screens), harness, native client
 
 **Framework**:
 A named collection of content released together, such as AIH-Extensions, ECC, Anthropic or Superpowers; the left panel lists release-backed frameworks by their published names. Host-selected internal prepared content is labelled separately.
-_Avoid_: family (on default screens), release, catalog, category
+_Avoid_: family (on default screens), release, catalog
+
+**Category**:
+The purpose Catalog declares for a framework. Workbench uses Workflow frameworks, Guidance, Domain skills and AI setups. Frameworks without a declared purpose appear under Uncategorized.
+
+**Type**:
+The kind of individual content, such as a Skill, Hook or MCP server.
 
 **Project basics**:
 A framework of shared project guidance. Internal prepared content is explicitly unbound, unauthenticated and non-production until its release obligations are met. The existing project tools and workspace remain accessible separately.

@@ -22,27 +22,22 @@ async function readBounded(path, limit) {
 export async function approvedCatalog() {
   if (typeof catalog.readContent !== 'function' || !catalog.aihContent?.content) return { state: 'legacy' };
   const paths = process.env.AIH_APPROVED_CATALOG_CONTENT?.split(delimiter) ?? [];
-  if (paths.length > 16 || paths.some(path => !isAbsolute(path))) throw new Error('Configure up to 16 absolute Catalog content paths.');
-  const documents = [];
+  if (paths.some(path => !isAbsolute(path))) throw new Error('Configure absolute Catalog content paths.');
   const problems = [];
-  for (const [index, path] of paths.entries()) {
-    try { documents.push(await readBounded(path, 8 * 1024 * 1024)); }
-    catch { problems.push(`Configured Catalog source ${index + 1} could not be read.`); }
-  }
   const frameworks = new Map();
   const items = [];
-  const bundled = Buffer.from(JSON.stringify(catalog.aihContent.content));
-  for (const bytes of [...documents, bundled]) {
+  function record(bytes, bundled = false) {
     const checked = catalog.readContent(bytes);
     if (checked.status !== 'ok') {
       problems.push(`Catalog refused a content document (${checked.status}).`);
-      continue;
+      return;
     }
     const sha256 = createHash('sha256').update(bytes).digest('hex');
-    if (frameworks.has(sha256)) continue;
+    if (frameworks.has(sha256)) return;
     const framework = checked.content.framework;
-    if (bytes === bundled && [...frameworks.values()].some(value => value.frameworkId === framework.id)) continue;
-    frameworks.set(sha256, { id: sha256, frameworkId: framework.id, sha256, name: framework.name, state: 'ready' });
+    if (bundled && [...frameworks.values()].some(value => value.frameworkId === framework.id)) return;
+    frameworks.set(sha256, { id: sha256, frameworkId: framework.id, sha256, name: framework.name,
+      category: framework.category, state: 'ready' });
     for (const item of catalog.listItems(checked.content)) {
       items.push({ id: `${sha256}/${item.id}`, itemId: item.id, title: item.name ?? item.id, kind: item.kind,
         description: item.description, framework: sha256, frameworkName: framework.name, scanKey: item.scanKey,
@@ -50,6 +45,13 @@ export async function approvedCatalog() {
         ...(item.kind === 'ai-setup' && typeof item.aiSetup?.mcpItem === 'string' ? { mcpItem: item.aiSetup.mcpItem } : {}) });
     }
   }
+  for (const [index, path] of paths.entries()) {
+    let bytes;
+    try { bytes = await readBounded(path, 8 * 1024 * 1024); }
+    catch { problems.push(`Configured Catalog source ${index + 1} could not be read.`); continue; }
+    record(bytes);
+  }
+  record(Buffer.from(JSON.stringify(catalog.aihContent.content)), true);
   return { state: 'read-only', frameworks: [...frameworks.values()], items, problems };
 }
 
